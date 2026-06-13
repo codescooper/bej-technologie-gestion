@@ -43,3 +43,64 @@ jobs:
       - uses: dart-lang/setup-dart@v1
       - run: dart pub get
       - run: dart analyze
+
+  e2e:
+    name: Tests E2E (PostgreSQL + backend + Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: bej_ci_pwd
+          POSTGRES_DB: bej
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PGPASSWORD: bej_ci_pwd
+      DISPLAY: ":99"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: nanasess/setup-chromedriver@v2
+      - name: Dépendances système (psql + xvfb)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client xvfb
+      - name: Schéma + seed PostgreSQL (001 → 009)
+        run: |
+          for f in backend/schema/0*.sql; do
+            echo "==> $f"
+            psql -h localhost -U postgres -d bej -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Démarrer le backend de synchronisation
+        working-directory: backend/server
+        run: |
+          dart pub get
+          nohup dart run bin/server.dart > "$RUNNER_TEMP/backend.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/health >/dev/null && { echo "backend prêt"; break; }
+            sleep 2
+          done
+          curl -sf http://localhost:8080/health || { echo "backend KO"; cat "$RUNNER_TEMP/backend.log"; exit 1; }
+      - name: Tests E2E (flutter drive, Chrome sous Xvfb)
+        working-directory: app
+        run: |
+          flutter pub get
+          Xvfb :99 -screen 0 1280x1024x24 >/dev/null 2>&1 &
+          sleep 2
+          chromedriver --port=4444 >/dev/null 2>&1 &
+          sleep 3
+          set -e
+          for t in phase0_test finitions_test suivi_appareil_test; do
+            echo "::group::flutter drive $t"
+            flutter drive \
+              --driver=test_driver/integration_test.dart \
+              --target=integration_test/$t.dart \
+              -d web-server --browser-name=chrome
+            echo "::endgroup::"
+          done
