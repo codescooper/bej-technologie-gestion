@@ -7,6 +7,9 @@ serveur, installabilité) et les périphériques boutique, avant d'attaquer la
 Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
 
 ## ✅ Fait (cette semaine)
+- **Intégration continue (GitHub Actions)** — à chaque push : `flutter analyze`
+  (`--no-fatal-infos`) + `flutter test` + `flutter build web` (app) et `dart analyze`
+  (backend). **CI verte** ; badge dans le README. E2E (flutter drive) hors CI.
 - **Publication GitHub (public)** — dépôt **github.com/codescooper/bej-technologie-gestion** ;
   le mot de passe Postgres de dev a été **retiré du code et de l'historique git** (déplacé
   dans `backend/scripts/local.env.ps1`, non versionné). `db.ps1` corrigé (schéma `001→009`).

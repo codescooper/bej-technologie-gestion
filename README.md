@@ -1,5 +1,7 @@
 # BEJ Technologie — Application de gestion
 
+[![CI](https://github.com/codescooper/bej-technologie-gestion/actions/workflows/ci.yml/badge.svg)](https://github.com/codescooper/bej-technologie-gestion/actions/workflows/ci.yml)
+
 Application de gestion pour BEJ Technologie (réparation + vente d'accessoires,
 3 magasins en Côte d'Ivoire), **offline-first**. Priorité métier : CRM client +
 stock + caisse/vente + réparations.
