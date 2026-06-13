@@ -26,7 +26,9 @@ jobs:
           cache: true
       - run: flutter --version
       - run: flutter pub get
-      - run: flutter analyze
+      # --no-fatal-infos : on échoue sur warnings/erreurs, on tolère les infos
+      # (style + dépréciations dues au drift de version Flutter de la CI).
+      - run: flutter analyze --no-fatal-infos
       - run: flutter test
       - run: flutter build web --release
 
