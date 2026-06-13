@@ -1,10 +1,10 @@
 name: CI
 
-# Analyse statique + tests unitaires + build web à chaque push / PR.
-# Les tests E2E (flutter drive) ne sont PAS dans la CI : ils nécessitent
-# PostgreSQL + le backend de synchronisation + chromedriver. Ils se lancent
-# en local (cf. README / docs). On les ajoutera ici plus tard si besoin
-# (service `postgres` + Chrome headless).
+# Pipeline CI (push / PR) :
+#  - app     : flutter analyze + flutter test + flutter build web
+#  - backend : dart analyze
+#  - e2e     : tests `flutter drive` (sous-ensemble représentatif) avec
+#              PostgreSQL + le backend de synchronisation + Chrome sous Xvfb.
 
 on:
   push:

@@ -7,6 +7,11 @@ serveur, installabilité) et les périphériques boutique, avant d'attaquer la
 Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
 
 ## ✅ Fait (cette semaine)
+- **Tests E2E dans la CI** — job dédié (PostgreSQL + backend de sync + Chrome sous Xvfb)
+  qui rejoue `phase0` / `finitions` / `suivi_appareil` à chaque push : la donnée créée
+  hors-ligne est poussée et vérifiée côté serveur. **CI complète verte.**
+- **Commits en email *noreply*** — git configuré sur `…@users.noreply.github.com` (futurs
+  commits ; réécriture des 5 anciens bloquée par le garde-fou de sécurité → manuel/autorisation).
 - **Intégration continue (GitHub Actions)** — à chaque push : `flutter analyze`
   (`--no-fatal-infos`) + `flutter test` + `flutter build web` (app) et `dart analyze`
   (backend). **CI verte** ; badge dans le README. E2E (flutter drive) hors CI.
@@ -76,8 +81,8 @@ compatibles déjà en place).
 
 ## ⚠️ Dettes / risques connus
 - **Dépôt GitHub public** : `github.com/codescooper/bej-technologie-gestion` (secret de
-  dev purgé). L'**email d'auteur des commits** (compte `codescooper`) est public — basculer
-  sur l'email *noreply* GitHub si tu souhaites le masquer pour les prochains commits.
+  dev purgé). Futurs commits en *noreply* ; les **5 premiers commits** portent encore
+  l'email perso (réécriture d'historique à autoriser/exécuter pour les purger).
 - **PostgreSQL instable sur cette machine** : retombe régulièrement (interférence
   antivirus/disque sur `pgdata`), recovery lent (~33 s de fsync). Mitigation :
   **`backend/scripts/restart-stack.ps1`** (relance PG + backend en une commande).
