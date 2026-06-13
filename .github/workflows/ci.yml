@@ -1,0 +1,43 @@
+name: CI
+
+# Analyse statique + tests unitaires + build web à chaque push / PR.
+# Les tests E2E (flutter drive) ne sont PAS dans la CI : ils nécessitent
+# PostgreSQL + le backend de synchronisation + chromedriver. Ils se lancent
+# en local (cf. README / docs). On les ajoutera ici plus tard si besoin
+# (service `postgres` + Chrome headless).
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  app:
+    name: App Flutter (analyze · test · build web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build web --release
+
+  backend:
+    name: Backend Dart (analyze)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - run: dart pub get
+      - run: dart analyze
