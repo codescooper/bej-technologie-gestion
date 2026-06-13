@@ -7,6 +7,9 @@ serveur, installabilité) et les périphériques boutique, avant d'attaquer la
 Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
 
 ## ✅ Fait (cette semaine)
+- **Publication GitHub (public)** — dépôt **github.com/codescooper/bej-technologie-gestion** ;
+  le mot de passe Postgres de dev a été **retiré du code et de l'historique git** (déplacé
+  dans `backend/scripts/local.env.ps1`, non versionné). `db.ps1` corrigé (schéma `001→009`).
 - **Finition UX login** — spinner + bouton désactivé pendant la vérification du PIN
   (anti double-clic) ; `auth_test` re-validé.
 - **Docs & versionnage** — `README.md` remis à jour (migrations `001→009`, durcissement,
@@ -69,8 +72,9 @@ compatibles déjà en place).
   (dépend d'accès externes DGI).
 
 ## ⚠️ Dettes / risques connus
-- **Dépôt git local non poussé** : code désormais **versionné** (commit initial) mais
-  **sans remote** → pas encore de copie du code hors machine (à pousser vers un dépôt distant).
+- **Dépôt GitHub public** : `github.com/codescooper/bej-technologie-gestion` (secret de
+  dev purgé). L'**email d'auteur des commits** (compte `codescooper`) est public — basculer
+  sur l'email *noreply* GitHub si tu souhaites le masquer pour les prochains commits.
 - **PostgreSQL instable sur cette machine** : retombe régulièrement (interférence
   antivirus/disque sur `pgdata`), recovery lent (~33 s de fsync). Mitigation :
   **`backend/scripts/restart-stack.ps1`** (relance PG + backend en une commande).
