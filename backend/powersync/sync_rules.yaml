@@ -1,0 +1,67 @@
+# =====================================================================
+# BEJ Technologie — Règles de synchronisation PowerSync
+#
+# Modèle de partage (§2.4 / §2.6 / §5.9) :
+#   * Données GLOBALES répliquées sur tous les postes : référentiel
+#     (roles, magasins, produits, fournisseurs) + CRM partagé entre magasins
+#     (clients, appareils, jeton_transactions — le solde jetons est global).
+#   * Données OPÉRATIONNELLES par magasin : stock, caisses, transactions,
+#     lignes, paiements, mouvements, réparations, photos — un poste ne reçoit
+#     que les données de SON magasin (request.user_id() -> utilisateurs.magasin_id).
+#
+# Hypothèse d'auth : le JWT PowerSync porte le sub = utilisateurs.id.
+# L'admin global (magasin_id NULL) verra le référentiel + le CRM ; la vue
+# consolidée multi-magasins (dashboard global §6) sera ajoutée en Phase 2
+# (bucket admin dédié), hors périmètre du critère Phase 0.
+# =====================================================================
+
+bucket_definitions:
+
+  # ---- Données globales, lecture pour tout utilisateur authentifié ----
+  global_reference:
+    data:
+      - SELECT * FROM roles
+      - SELECT * FROM magasins
+      - SELECT * FROM produits
+      - SELECT * FROM fournisseurs
+
+  # ---- CRM partagé entre magasins (clients/appareils/jetons globaux) ----
+  global_crm:
+    data:
+      - SELECT * FROM clients
+      - SELECT * FROM appareils
+      - SELECT * FROM jeton_transactions
+
+  # ---- Données opérationnelles du magasin de l'utilisateur ----
+  par_magasin:
+    # Paramètre de bucket = le magasin de l'utilisateur connecté.
+    parameters:
+      - SELECT magasin_id FROM utilisateurs WHERE id = request.user_id()
+    data:
+      - SELECT * FROM stocks_magasin     WHERE magasin_id = bucket.magasin_id
+      - SELECT * FROM caisses            WHERE magasin_id = bucket.magasin_id
+      - SELECT * FROM transactions       WHERE magasin_id = bucket.magasin_id
+      - SELECT * FROM reparations        WHERE magasin_id = bucket.magasin_id
+      - SELECT * FROM mouvements_stock   WHERE magasin_id = bucket.magasin_id
+      - SELECT * FROM achats_fournisseur WHERE magasin_id = bucket.magasin_id
+      # Tables filles rattachées au magasin via leur parent : on les filtre
+      # par magasin_id dénormalisé si présent, sinon elles transitent par la
+      # table parente. lignes_transaction / paiements / photos_appareil n'ont
+      # pas de magasin_id : on les synchronise via une jointure sur le parent.
+      - SELECT lt.* FROM lignes_transaction lt
+          JOIN transactions t ON t.id = lt.transaction_id
+          WHERE t.magasin_id = bucket.magasin_id
+      - SELECT p.* FROM paiements p
+          JOIN transactions t ON t.id = p.transaction_id
+          WHERE t.magasin_id = bucket.magasin_id
+      - SELECT ph.* FROM photos_appareil ph
+          JOIN reparations r ON r.id = ph.reparation_id
+          WHERE r.magasin_id = bucket.magasin_id
+
+  # ---- Utilisateurs du magasin (pour affichage/attribution) ----
+  utilisateurs_magasin:
+    parameters:
+      - SELECT magasin_id FROM utilisateurs WHERE id = request.user_id()
+    data:
+      - SELECT id, magasin_id, role_id, nom, login, actif, date_creation
+          FROM utilisateurs WHERE magasin_id = bucket.magasin_id

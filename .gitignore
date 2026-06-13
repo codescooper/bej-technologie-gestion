@@ -1,0 +1,28 @@
+# Build & artefacts Flutter / Dart
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.iml
+app/build/
+app/.dart_tool/
+backend/server/.dart_tool/
+backend/server/build/
+
+# Sauvegardes base — ne pas versionner les dumps
+backend/backups/
+
+# Logs
+*.log
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Secrets éventuels
+*.env
+*.pem
+backend/scripts/local.env.ps1

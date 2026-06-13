@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    Le href ci-dessous est remplacé par la valeur de --base-href au build.
+    Doit commencer et finir par "/" s'il est servi hors de la racine.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Gestion de magasin (stock, caisse, ventes, réparations, multi-magasins) — BEJ Technologie.">
+
+  <!-- Appli installable (PWA) -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BEJ Gestion">
+  <meta name="theme-color" content="#1565C0">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>BEJ Technologie — Gestion</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #1565C0; }
+    #bej-loading {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; background: #1565C0; color: #ffffff;
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #bej-loading .spinner {
+      width: 44px; height: 44px; border: 4px solid rgba(255,255,255,.35);
+      border-top-color: #ffffff; border-radius: 50%;
+      animation: bej-spin 1s linear infinite;
+    }
+    #bej-loading .title { font-size: 22px; font-weight: 600; letter-spacing: .5px; }
+    #bej-loading .sub { font-size: 13px; opacity: .85; }
+    @keyframes bej-spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!-- Écran de chargement (retiré au premier rendu Flutter) -->
+  <div id="bej-loading">
+    <div class="spinner"></div>
+    <div class="title">BEJ Technologie</div>
+    <div class="sub">Chargement de la gestion…</div>
+  </div>
+
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('bej-loading');
+      if (el) {
+        el.style.transition = 'opacity .3s ease';
+        el.style.opacity = '0';
+        setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, 320);
+      }
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
