@@ -14,6 +14,8 @@ Future<void> seedLocalReferenceIfEmpty(PowerSyncDatabase db) async {
   await _seedCataloguesIfEmpty(db);
   // Backfill des codes-barres pour les bases déjà installées (scan comptoir §8).
   await _seedCodeBarresIfMissing(db);
+  // Backfill du QR vente (payload BEJ-P-<id>) pour les produits sans QR.
+  await _seedQrProduitsIfMissing(db);
 
   final rs = await db.getAll('SELECT count(*) AS c FROM magasins');
   final count = (rs.first['c'] as num).toInt();
@@ -184,4 +186,14 @@ Future<void> _seedCodeBarresIfMissing(PowerSyncDatabase db) async {
       );
     }
   });
+}
+
+/// Affecte un QR vente `BEJ-P-<id>` aux produits qui n'en ont pas (scan article,
+/// tout-QR). Idempotent : ne touche que les `qr_code` vides → sûr pour bases
+/// neuves comme déjà installées.
+Future<void> _seedQrProduitsIfMissing(PowerSyncDatabase db) async {
+  await db.execute(
+    "UPDATE produits SET qr_code = 'BEJ-P-' || id "
+    "WHERE qr_code IS NULL OR qr_code = ''",
+  );
 }

@@ -17,6 +17,7 @@ import 'src/data/repositories/avoir_repository.dart';
 import 'src/data/repositories/catalogue_repository.dart';
 import 'src/data/repositories/transfert_repository.dart';
 import 'src/data/repositories/inventaire_repository.dart';
+import 'src/data/repositories/etiquette_qr_repository.dart';
 import 'src/data/repositories/auth_repository.dart';
 import 'src/data/demo_controller.dart';
 import 'src/ui/app_shell.dart';
@@ -54,6 +55,7 @@ Future<void> main() async {
     catalogueRepo: CatalogueRepository(db),
     transfertRepo: TransfertRepository(db),
     inventaireRepo: InventaireRepository(db),
+    etiquetteRepo: EtiquetteQrRepository(db),
     demoController: DemoController(
       db: db,
       session: session,
@@ -90,6 +92,7 @@ class BejApp extends StatelessWidget {
   final CatalogueRepository catalogueRepo;
   final TransfertRepository transfertRepo;
   final InventaireRepository inventaireRepo;
+  final EtiquetteQrRepository? etiquetteRepo;
   final DemoController? demoController;
   final SyncService syncService;
   final ApiClient api;
@@ -111,6 +114,7 @@ class BejApp extends StatelessWidget {
     required this.catalogueRepo,
     required this.transfertRepo,
     required this.inventaireRepo,
+    this.etiquetteRepo,
     this.demoController,
     required this.syncService,
     required this.api,
@@ -146,6 +150,7 @@ class BejApp extends StatelessWidget {
             catalogueRepo: catalogueRepo,
             transfertRepo: transfertRepo,
             inventaireRepo: inventaireRepo,
+            etiquetteRepo: etiquetteRepo,
             demoController: demoController,
             syncService: syncService,
             api: api,

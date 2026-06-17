@@ -50,6 +50,65 @@ class ProduitRepository {
     return rs.isEmpty ? null : ProduitStock.fromRow(rs.first);
   }
 
+  /// Recherche un produit actif par id, avec sa quantité disponible dans le
+  /// magasin (routage du scan universel QR → vente). Null si introuvable.
+  Future<ProduitStock?> findById(String magasinId, String id) async {
+    final c = id.trim();
+    if (c.isEmpty) return null;
+    final rs = await db.getAll(
+      'SELECT p.*, COALESCE(s.quantite_disponible, 0) AS qte '
+      'FROM produits p '
+      'LEFT JOIN stocks_magasin s '
+      '  ON s.produit_id = p.id AND s.magasin_id = ? '
+      'WHERE p.id = ? AND COALESCE(p.actif, 1) = 1 '
+      'LIMIT 1',
+      [magasinId, c],
+    );
+    return rs.isEmpty ? null : ProduitStock.fromRow(rs.first);
+  }
+
+  /// Génère un QR vente `BEJ-P-<id>` pour les produits sélectionnés qui n'en ont
+  /// pas encore (colonne `qr_code` vide). Idempotent. Renvoie le nombre de QR
+  /// nouvellement générés (comptés avant l'UPDATE — `execute` ne renvoie pas le
+  /// nombre de lignes modifiées).
+  Future<int> genererQrCodesManquants(List<String> produitIds) async {
+    final ids = produitIds.where((e) => e.trim().isNotEmpty).toList();
+    if (ids.isEmpty) return 0;
+    final ph = List.filled(ids.length, '?').join(',');
+    final manquants = await db.getAll(
+      "SELECT count(*) AS c FROM produits "
+      "WHERE id IN ($ph) AND (qr_code IS NULL OR qr_code = '')",
+      ids,
+    );
+    final n = ((manquants.first['c'] as num?) ?? 0).toInt();
+    if (n == 0) return 0;
+    await db.writeTransaction((tx) async {
+      for (final id in ids) {
+        await tx.execute(
+          "UPDATE produits SET qr_code = 'BEJ-P-' || id "
+          "WHERE id = ? AND (qr_code IS NULL OR qr_code = '')",
+          [id],
+        );
+      }
+    });
+    return n;
+  }
+
+  /// Données d'impression des étiquettes QR vente (nom, prix, code-barres en
+  /// clair, payload QR généré à la volée si absent) pour les produits choisis.
+  Future<List<Map<String, dynamic>>> qrLabelsVente(
+      List<String> produitIds) async {
+    final ids = produitIds.where((e) => e.trim().isNotEmpty).toList();
+    if (ids.isEmpty) return const [];
+    final ph = List.filled(ids.length, '?').join(',');
+    return db.getAll(
+      'SELECT id, nom, prix_vente, code_barres, '
+      "COALESCE(NULLIF(qr_code,''), 'BEJ-P-' || id) AS payload "
+      'FROM produits WHERE id IN ($ph)',
+      ids,
+    );
+  }
+
   /// Crée un produit et sa ligne de stock dans le magasin courant.
   Future<void> creerProduit({
     required String nom,

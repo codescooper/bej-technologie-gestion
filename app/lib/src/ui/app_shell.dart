@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_session.dart';
+import '../models/produit.dart';
 import '../data/api_client.dart';
 import '../data/sync_service.dart';
 import '../data/ref_ids.dart';
@@ -16,6 +17,7 @@ import '../data/repositories/avoir_repository.dart';
 import '../data/repositories/catalogue_repository.dart';
 import '../data/repositories/transfert_repository.dart';
 import '../data/repositories/inventaire_repository.dart';
+import '../data/repositories/etiquette_qr_repository.dart';
 import '../data/demo_controller.dart';
 import 'clients_page.dart';
 import 'transferts_page.dart';
@@ -26,6 +28,8 @@ import 'vente_page.dart';
 import 'reparations_page.dart';
 import 'guide_page.dart';
 import 'demo_page.dart';
+import 'scan_page.dart';
+import 'qr_codes_page.dart';
 
 /// Coquille applicative : navigation 4 onglets, sélecteur de magasin et
 /// synchronisation globale (état online + file en attente).
@@ -44,6 +48,7 @@ class AppShell extends StatefulWidget {
   final CatalogueRepository catalogueRepo;
   final TransfertRepository transfertRepo;
   final InventaireRepository inventaireRepo;
+  final EtiquetteQrRepository? etiquetteRepo;
   final DemoController? demoController;
   final SyncService syncService;
   final ApiClient api;
@@ -64,6 +69,7 @@ class AppShell extends StatefulWidget {
     required this.catalogueRepo,
     required this.transfertRepo,
     required this.inventaireRepo,
+    this.etiquetteRepo,
     this.demoController,
     required this.syncService,
     required this.api,
@@ -80,7 +86,18 @@ class _AppShellState extends State<AppShell> {
   DateTime? _lastSync;
   bool _syncing = false;
 
+  // Produit résolu par le scan universel → injecté dans la Vente (IndexedStack
+  // garde les pages vivantes, d'où le passage par un notifier plutôt qu'initState).
+  final ValueNotifier<ProduitStock?> _injecterVente =
+      ValueNotifier<ProduitStock?>(null);
+
   static const _titles = ['Clients', 'Stock', 'Caisse', 'Vente', 'Réparations'];
+
+  @override
+  void dispose() {
+    _injecterVente.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -146,6 +163,7 @@ class _AppShellState extends State<AppShell> {
             avoirRepo: widget.avoirRepo,
             session: widget.session,
             onVente: _refresh,
+            produitInjecte: _injecterVente,
           ),
           ReparationsPage(
             reparationRepo: widget.reparationRepo,
@@ -155,6 +173,7 @@ class _AppShellState extends State<AppShell> {
             caisseRepo: widget.caisseRepo,
             photoRepo: widget.photoRepo,
             catalogueRepo: widget.catalogueRepo,
+            etiquetteRepo: widget.etiquetteRepo,
             session: widget.session,
           ),
         ];
@@ -170,6 +189,45 @@ class _AppShellState extends State<AppShell> {
                         padding: const EdgeInsets.only(right: 8),
                         child: Text(widget.session.magasinNom,
                             style: const TextStyle(color: Colors.white)))),
+              if (widget.etiquetteRepo != null)
+                IconButton(
+                  tooltip: 'Scanner (QR / code-barres)',
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: () async {
+                    final ps =
+                        await Navigator.of(context).push<ProduitStock>(
+                      MaterialPageRoute(
+                        builder: (_) => ScanPage(
+                          etiquetteRepo: widget.etiquetteRepo!,
+                          produitRepo: widget.produitRepo,
+                          reparationRepo: widget.reparationRepo,
+                          caisseRepo: widget.caisseRepo,
+                          photoRepo: widget.photoRepo,
+                          session: widget.session,
+                        ),
+                      ),
+                    );
+                    if (ps != null && mounted) {
+                      _injecterVente.value = ps;
+                      setState(() => _index = 3);
+                    }
+                  },
+                ),
+              if (widget.etiquetteRepo != null &&
+                  widget.session.peutGererQrCodes)
+                IconButton(
+                  tooltip: 'Étiquettes QR (préparer & imprimer)',
+                  icon: const Icon(Icons.qr_code_2),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => QrCodesPage(
+                        etiquetteRepo: widget.etiquetteRepo!,
+                        produitRepo: widget.produitRepo,
+                        session: widget.session,
+                      ),
+                    ),
+                  ),
+                ),
               if (widget.session.peutDashboard)
                 IconButton(
                   tooltip: 'Tableau de bord',

@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../app_session.dart';
 import '../data/repositories/reparation_repository.dart';
 import '../data/repositories/appareil_repository.dart';
@@ -7,11 +10,13 @@ import '../data/repositories/produit_repository.dart';
 import '../data/repositories/caisse_repository.dart';
 import '../data/repositories/photo_repository.dart';
 import '../data/repositories/catalogue_repository.dart';
+import '../data/repositories/etiquette_qr_repository.dart';
 import '../models/reparation.dart';
 import '../models/client.dart';
 import '../models/appareil.dart';
 import '../util/format.dart';
 import 'reparation_detail_page.dart';
+import 'scan_camera.dart';
 import 'widgets/recherche_dialog.dart';
 
 /// Onglet Réparations (§5.2) : liste filtrable par statut + création.
@@ -23,6 +28,7 @@ class ReparationsPage extends StatefulWidget {
   final CaisseRepository caisseRepo;
   final PhotoRepository photoRepo;
   final CatalogueRepository catalogueRepo;
+  final EtiquetteQrRepository? etiquetteRepo;
   final AppSession session;
 
   const ReparationsPage({
@@ -34,6 +40,7 @@ class ReparationsPage extends StatefulWidget {
     required this.caisseRepo,
     required this.photoRepo,
     required this.catalogueRepo,
+    this.etiquetteRepo,
     required this.session,
   });
 
@@ -171,6 +178,8 @@ class _ReparationsPageState extends State<ReparationsPage> {
         reparationRepo: widget.reparationRepo,
         catalogueRepo: widget.catalogueRepo,
         session: widget.session,
+        photoRepo: widget.photoRepo,
+        etiquetteRepo: widget.etiquetteRepo,
       ),
     );
   }
@@ -182,6 +191,8 @@ class _NouvelleReparationDialog extends StatefulWidget {
   final ReparationRepository reparationRepo;
   final CatalogueRepository catalogueRepo;
   final AppSession session;
+  final PhotoRepository photoRepo;
+  final EtiquetteQrRepository? etiquetteRepo;
 
   const _NouvelleReparationDialog({
     required this.clients,
@@ -189,6 +200,8 @@ class _NouvelleReparationDialog extends StatefulWidget {
     required this.reparationRepo,
     required this.catalogueRepo,
     required this.session,
+    required this.photoRepo,
+    this.etiquetteRepo,
   });
 
   @override
@@ -205,6 +218,58 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
   final _etat = TextEditingController();
   final _devis = TextEditingController(text: '0');
   bool _saving = false;
+
+  // Tout-QR : photos multi-angles (en mémoire avant save) + sticker QR à apposer.
+  final List<String> _photos = [];
+  final _qrCtrl = TextEditingController();
+  String? _qrExistant; // QR déjà lié à un appareil réutilisé (lecture seule)
+
+  @override
+  void dispose() {
+    _imei.dispose();
+    _etat.dispose();
+    _devis.dispose();
+    _qrCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ajouterPhoto() async {
+    final x = await ImagePicker().pickImage(
+        source: ImageSource.gallery, maxWidth: 1024, imageQuality: 50);
+    if (x == null) return;
+    final bytes = await x.readAsBytes();
+    if (!mounted) return;
+    setState(() => _photos.add('data:image/jpeg;base64,${base64Encode(bytes)}'));
+  }
+
+  Uint8List? _decodePhoto(String dataUrl) {
+    final i = dataUrl.indexOf(',');
+    if (i < 0) return null;
+    try {
+      return base64Decode(dataUrl.substring(i + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _scanQrCamera() async {
+    final code = await scannerCameraQr(context);
+    if (code != null && code.trim().isNotEmpty) {
+      setState(() => _qrCtrl.text = code.trim());
+    }
+  }
+
+  /// Charge le QR déjà lié à l'appareil réutilisé (affichage lecture seule).
+  Future<void> _chargerQrExistant() async {
+    final repo = widget.etiquetteRepo;
+    final id = _appareilExistantId;
+    if (repo == null || id == null) {
+      if (_qrExistant != null) setState(() => _qrExistant = null);
+      return;
+    }
+    final code = await repo.codeParAppareil(id);
+    if (mounted) setState(() => _qrExistant = code);
+  }
 
   // Suivi par appareil : appareils déjà connus du client + nb de réparations.
   List<Appareil> _appareils = [];
@@ -253,6 +318,21 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
     if (mounted) setState(() => _pannesSuggerees = f);
   }
 
+  // Devis auto : prix médian des réparations similaires (data-driven, offline).
+  DevisSuggere? _devisSuggere;
+
+  Future<void> _chargerDevisSuggere() async {
+    final modele = _modeleCourantStr();
+    final pb = (_probleme ?? '').trim();
+    if (modele == null || modele.trim().isEmpty || pb.isEmpty) {
+      if (_devisSuggere != null) setState(() => _devisSuggere = null);
+      return;
+    }
+    final d =
+        await widget.reparationRepo.devisSuggere(modele: modele, probleme: pb);
+    if (mounted) setState(() => _devisSuggere = d);
+  }
+
   String? get _modeleLibelle =>
       (_marque == null && _modele == null) ? null : '$_marque $_modele'.trim();
 
@@ -276,6 +356,8 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
     });
     _verifierGarantie();
     _chargerPannesFrequentes();
+    _chargerQrExistant();
+    _chargerDevisSuggere();
   }
 
   String _libelleAppareil(Appareil a) {
@@ -294,6 +376,7 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
         _modele = m.modele;
       });
       _chargerPannesFrequentes();
+      _chargerDevisSuggere();
     }
   }
 
@@ -302,6 +385,7 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
     if (p != null) {
       setState(() => _probleme = p);
       _verifierGarantie();
+      _chargerDevisSuggere();
     }
   }
 
@@ -334,6 +418,8 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
               setState(() => _appareilExistantId = v);
               _verifierGarantie();
               _chargerPannesFrequentes();
+              _chargerQrExistant();
+              _chargerDevisSuggere();
             },
             title: Text(_libelleAppareil(a)),
             subtitle: Text([
@@ -347,12 +433,116 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
         RadioListTile<String?>(
           value: null,
           groupValue: _appareilExistantId,
-          onChanged: (v) => setState(() => _appareilExistantId = v),
+          onChanged: (v) {
+            setState(() => _appareilExistantId = v);
+            _chargerQrExistant();
+            _chargerDevisSuggere();
+          },
           title: const Text('➕ Nouvel appareil'),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
       ],
+    );
+  }
+
+  Widget _champQr() {
+    if (_qrExistant != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: InputDecorator(
+          decoration: const InputDecoration(
+              labelText: 'QR de l\'appareil', border: OutlineInputBorder()),
+          child: Row(children: [
+            const Icon(Icons.qr_code_2, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(_qrExistant!)),
+            const Chip(
+                label: Text('déjà lié'),
+                visualDensity: VisualDensity.compact),
+          ]),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: TextField(
+        controller: _qrCtrl,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'QR de l\'appareil (sticker)',
+          helperText: 'Scannez un sticker préparé, ou saisissez son code.',
+          prefixIcon: const Icon(Icons.qr_code_2),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.photo_camera),
+            tooltip: 'Scanner avec la caméra',
+            onPressed: _scanQrCamera,
+          ),
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  Widget _vignettePhoto(int index, String dataUrl) {
+    final bytes = _decodePhoto(dataUrl);
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: Stack(fit: StackFit.expand, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: bytes == null
+              ? const ColoredBox(
+                  color: Colors.black12, child: Icon(Icons.broken_image))
+              : Image.memory(bytes, fit: BoxFit.cover),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          child: GestureDetector(
+            onTap: () => setState(() => _photos.removeAt(index)),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(6),
+                    topRight: Radius.circular(6)),
+              ),
+              padding: const EdgeInsets.all(2),
+              child: const Icon(Icons.close, size: 14, color: Colors.white),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _bannerDevisSuggere() {
+    final d = _devisSuggere!;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.lightBlue.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(children: [
+        Icon(Icons.auto_graph, color: Colors.blue.shade700, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Devis suggéré : ~${fcfa(d.prix)}  '
+            '(${d.nbCas} cas${d.elargi ? ', toutes marques' : ''})',
+            style: TextStyle(color: Colors.blue.shade900, fontSize: 12),
+          ),
+        ),
+        TextButton(
+          onPressed: () =>
+              setState(() => _devis.text = d.prix.round().toString()),
+          child: const Text('Utiliser'),
+        ),
+      ]),
     );
   }
 
@@ -368,29 +558,58 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
       return;
     }
     setState(() => _saving = true);
-    String appareilId;
-    if (_appareilExistantId != null) {
-      // Appareil déjà connu du client : on y rattache la réparation (suivi).
-      appareilId = _appareilExistantId!;
-    } else {
-      final appareil = await widget.appareilRepo.creer(
-        clientId: _clientId!,
-        type: 'téléphone',
-        marque: _marque,
-        modele: _modele,
-        imei: _imei.text.trim().isEmpty ? null : _imei.text.trim(),
+    try {
+      String appareilId;
+      if (_appareilExistantId != null) {
+        // Appareil déjà connu du client : on y rattache la réparation (suivi).
+        appareilId = _appareilExistantId!;
+      } else {
+        final appareil = await widget.appareilRepo.creer(
+          clientId: _clientId!,
+          type: 'téléphone',
+          marque: _marque,
+          modele: _modele,
+          imei: _imei.text.trim().isEmpty ? null : _imei.text.trim(),
+        );
+        appareilId = appareil.id;
+      }
+
+      // Tout-QR : affecte le sticker scanné/saisi à l'appareil (si nouveau lien).
+      final qr = _qrCtrl.text.trim();
+      if (qr.isNotEmpty && _qrExistant == null && widget.etiquetteRepo != null) {
+        await widget.etiquetteRepo!.affecterAppareil(
+          code: qr,
+          appareilId: appareilId,
+          magasinId: widget.session.magasinId,
+        );
+      }
+
+      final reparationId = await widget.reparationRepo.creer(
+        appareilId: appareilId,
+        magasinId: widget.session.magasinId,
+        technicienId: widget.session.userId,
+        probleme: _probleme!.trim(),
+        etatVisuel: _etat.text.trim().isEmpty ? null : _etat.text.trim(),
+        devis: num.tryParse(_devis.text.trim()) ?? 0,
       );
-      appareilId = appareil.id;
+
+      // Photos « sous toutes les coutures » prises à la réception.
+      for (final url in _photos) {
+        await widget.photoRepo.ajouter(
+          reparationId: reparationId,
+          typePhoto: 'reception',
+          dataUrl: url,
+        );
+      }
+
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur : $e')),
+      );
     }
-    await widget.reparationRepo.creer(
-      appareilId: appareilId,
-      magasinId: widget.session.magasinId,
-      technicienId: widget.session.userId,
-      probleme: _probleme!.trim(),
-      etatVisuel: _etat.text.trim().isEmpty ? null : _etat.text.trim(),
-      devis: num.tryParse(_devis.text.trim()) ?? 0,
-    );
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -436,6 +655,8 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
                     decoration: const InputDecoration(
                         labelText: 'IMEI / n° série')),
               ],
+              // QR de l'appareil (tout-QR) : sticker pré-imprimé à apposer/lier.
+              if (_clientId != null && widget.etiquetteRepo != null) _champQr(),
               // Pannes fréquentes pour ce modèle (data-driven, tap = sélection).
               if (_pannesSuggerees.isNotEmpty) ...[
                 const Padding(
@@ -456,6 +677,7 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
                             onPressed: () {
                               setState(() => _probleme = p);
                               _verifierGarantie();
+                              _chargerDevisSuggere();
                             },
                           ))
                       .toList(),
@@ -494,10 +716,40 @@ class _NouvelleReparationDialogState extends State<_NouvelleReparationDialog> {
                   controller: _etat,
                   decoration:
                       const InputDecoration(labelText: 'État visuel à la réception')),
+              if (_devisSuggere != null) _bannerDevisSuggere(),
               TextField(
                   controller: _devis,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Devis estimé (FCFA)')),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Photos à la réception',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    'Photographiez l\'appareil sous tous les angles (face, dos, côtés, écran).',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var i = 0; i < _photos.length; i++)
+                      _vignettePhoto(i, _photos[i]),
+                    OutlinedButton.icon(
+                      onPressed: _ajouterPhoto,
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: const Text('Ajouter'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

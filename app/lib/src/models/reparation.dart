@@ -120,3 +120,12 @@ class ReparationListItem {
         clientId: r['client_id'] as String?,
       );
 }
+
+/// Suggestion de devis (data-driven) : médiane du total facturé des réparations
+/// similaires. `elargi` = repli sur la panne seule (tous modèles).
+class DevisSuggere {
+  final num prix;
+  final int nbCas;
+  final bool elargi;
+  DevisSuggere({required this.prix, required this.nbCas, required this.elargi});
+}

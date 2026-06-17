@@ -26,6 +26,7 @@ class VentePage extends StatefulWidget {
   final AvoirRepository avoirRepo;
   final AppSession session;
   final VoidCallback onVente;
+  final ValueNotifier<ProduitStock?>? produitInjecte;
 
   const VentePage({
     super.key,
@@ -37,6 +38,7 @@ class VentePage extends StatefulWidget {
     required this.avoirRepo,
     required this.session,
     required this.onVente,
+    this.produitInjecte,
   });
 
   @override
@@ -57,7 +59,25 @@ class _VentePageState extends State<VentePage> {
   final _scanFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    widget.produitInjecte?.addListener(_consommerInjection);
+  }
+
+  /// Produit envoyé par le scan universel : ajout au panier, puis on vide le
+  /// notifier pour ne pas ré-ajouter au prochain rebuild.
+  void _consommerInjection() {
+    final n = widget.produitInjecte;
+    final ps = n?.value;
+    if (ps != null) {
+      _addProduit(ps);
+      n!.value = null;
+    }
+  }
+
+  @override
   void dispose() {
+    widget.produitInjecte?.removeListener(_consommerInjection);
     _scanCtrl.dispose();
     _scanFocus.dispose();
     super.dispose();

@@ -71,7 +71,7 @@ jobs:
       - uses: nanasess/setup-chromedriver@v2
       - name: Dépendances système (psql + xvfb)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client xvfb
-      - name: Schéma + seed PostgreSQL (001 → 009)
+      - name: Schéma + seed PostgreSQL (001 → 010)
         run: |
           for f in backend/schema/0*.sql; do
             echo "==> $f"
@@ -96,7 +96,7 @@ jobs:
           chromedriver --port=4444 >/dev/null 2>&1 &
           sleep 3
           set -e
-          for t in phase0_test finitions_test suivi_appareil_test; do
+          for t in phase0_test finitions_test suivi_appareil_test qr_labels_test; do
             echo "::group::flutter drive $t"
             flutter drive \
               --driver=test_driver/integration_test.dart \

@@ -27,6 +27,10 @@ production » et les périphériques boutique :
 - **Suivi par appareil** : réutilisation des appareils connus du client, historique
   par appareil, **alerte garantie** (même panne < 30 j), suggestions data-driven
   (**pannes fréquentes** par modèle, **pièces compatibles**).
+- **Tout-QR** : étiquettes QR brandées (orange, code en clair sous le QR) préparées
+  **en lot** et imprimables (**A4** / **rouleau** / **thermique 57 mm**), **scan
+  universel** (douchette + **caméra**) — produit → vente, appareil → fiche réparation —
+  et **réception avec photos multi-angles + affectation d'un sticker** à l'appareil.
 - **Mode Démo** intégré (rejoue tout le parcours) + **guide d'utilisation** dans
   l'app (icône **?**).
 
@@ -53,9 +57,9 @@ AppDeGestion/
 │   ├── tool/                # outils dev (gen_pin_hashes.dart)
 │   └── integration_test/    # suites E2E (flutter drive)
 ├── backend/
-│   ├── schema/              # migrations PostgreSQL (§7) — 001 → 009
+│   ├── schema/              # migrations PostgreSQL (§7) — 001 → 010
 │   │   ├── 001_init · 002_powersync · 003_seed · 004_avoirs · 005_catalogues
-│   │   └── 006_transferts · 007_inventaires · 008_pins · 009_verrou
+│   │   └── 006_transferts · 007_inventaires · 008_pins · 009_verrou · 010_qr
 │   ├── powersync/           # sync_rules.yaml
 │   ├── server/              # backend Dart shelf+postgres (/upload, /health)
 │   └── scripts/             # db.ps1, backup.ps1, restore.ps1, restart-stack.ps1, SAUVEGARDE.md

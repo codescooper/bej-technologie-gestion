@@ -96,6 +96,64 @@ class ReparationRepository {
     return rs.map((r) => r['p'] as String).toList();
   }
 
+  /// Devis suggéré pour (modèle + panne) = **médiane** du `total` facturé des
+  /// réparations similaires récentes (fenêtre [moisFenetre] mois, min [minCas]
+  /// cas, hors annulées et hors total nul). Repli sur la **panne seule** (tous
+  /// modèles) si pas assez de cas exacts. Null si l'historique est insuffisant.
+  /// 100 % local (offline) — prolonge l'atelier « intelligent ».
+  Future<DevisSuggere?> devisSuggere({
+    required String modele,
+    required String probleme,
+    int moisFenetre = 12,
+    int minCas = 2,
+  }) async {
+    final p = probleme.trim();
+    if (p.isEmpty) return null;
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(Duration(days: moisFenetre * 30))
+        .toIso8601String();
+
+    // 1) Cas exacts : même modèle + même panne.
+    final m = modele.trim();
+    if (m.isNotEmpty) {
+      final exact = await db.getAll(
+        'SELECT r.total AS t FROM reparations r '
+        'JOIN appareils a ON a.id = r.appareil_id '
+        'WHERE a.modele = ? AND lower(r.probleme) = lower(?) '
+        "AND r.statut <> 'annule' AND r.total > 0 AND r.date_creation >= ?",
+        [m, p, cutoff],
+      );
+      final vals =
+          exact.map((r) => (r['t'] as num?) ?? 0).where((x) => x > 0).toList();
+      if (vals.length >= minCas) {
+        return DevisSuggere(
+            prix: _mediane(vals), nbCas: vals.length, elargi: false);
+      }
+    }
+
+    // 2) Repli : même panne, tous modèles.
+    final large = await db.getAll(
+      'SELECT r.total AS t FROM reparations r '
+      'WHERE lower(r.probleme) = lower(?) '
+      "AND r.statut <> 'annule' AND r.total > 0 AND r.date_creation >= ?",
+      [p, cutoff],
+    );
+    final vals =
+        large.map((r) => (r['t'] as num?) ?? 0).where((x) => x > 0).toList();
+    if (vals.length >= minCas) {
+      return DevisSuggere(prix: _mediane(vals), nbCas: vals.length, elargi: true);
+    }
+    return null;
+  }
+
+  static num _mediane(List<num> valeurs) {
+    final v = [...valeurs]..sort();
+    final n = v.length;
+    if (n == 0) return 0;
+    return n.isOdd ? v[n ~/ 2] : (v[n ~/ 2 - 1] + v[n ~/ 2]) / 2;
+  }
+
   /// Crée une réparation (statut `reçu`). Le devis sert d'estimation ; la
   /// main-d'œuvre initiale = devis, les pièces s'ajoutent ensuite.
   Future<String> creer({

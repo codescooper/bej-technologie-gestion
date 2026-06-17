@@ -39,6 +39,7 @@ class AppSession extends ChangeNotifier {
   bool get peutAjusterStock => _estResp;
   bool get peutValiderRetour => _estResp;
   bool get peutDashboard => _estResp;
+  bool get peutGererQrCodes => _estResp;
   bool get peutModifierDiagnostic => _roleCode != 'caissier';
   bool get peutChangerMagasin => _estResp;
   bool get peutDashboardGlobal => estAdmin;

@@ -62,8 +62,10 @@ final schema = Schema([
     Column.text('notes'),
     Column.text('fusionne_vers'),
     Column.text('date_creation'),
+    Column.text('qr_code'), // sticker QR apposé (réparation) — résolution au scan
   ], indexes: [
     Index('appareils_client', [IndexedColumn('client_id')]),
+    Index('appareils_qr', [IndexedColumn('qr_code')]),
   ]),
 
   // ---- Réparations (§5.2 / §5.3) ----
@@ -276,5 +278,19 @@ final schema = Schema([
     Column.integer('ecart'),
   ], indexes: [
     Index('lignes_inventaire_inv', [IndexedColumn('inventaire_id')]),
+  ]),
+
+  // ---- Étiquettes QR (pool de stickers pré-imprimés, §QR centralisé) ----
+  Table('etiquettes_qr', [
+    Column.text('code'),
+    Column.text('type'), // reparation | vente
+    Column.text('statut'), // libre | utilise
+    Column.text('magasin_id'),
+    Column.text('appareil_id'),
+    Column.text('date_creation'),
+    Column.text('date_utilisation'),
+  ], indexes: [
+    Index('etiquettes_qr_code', [IndexedColumn('code')]),
+    Index('etiquettes_qr_magasin', [IndexedColumn('magasin_id')]),
   ]),
 ]);

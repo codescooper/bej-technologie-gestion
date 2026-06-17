@@ -67,7 +67,7 @@ port = $PORT
     # Crée la base applicative si absente puis applique les migrations.
     $exists = & "$PG\psql.exe" -U postgres -h localhost -p $PORT -tAc "SELECT 1 FROM pg_database WHERE datname='$APPDB'"
     if ($exists -ne "1") { & "$PG\createdb.exe" -U postgres -h localhost -p $PORT $APPDB; Write-Host "Base '$APPDB' créée." }
-    foreach ($f in @("001_init.sql","002_powersync.sql","003_seed.sql","004_avoirs.sql","005_catalogues.sql","006_transferts.sql","007_inventaires.sql","008_pins.sql","009_verrou.sql")) {
+    foreach ($f in @("001_init.sql","002_powersync.sql","003_seed.sql","004_avoirs.sql","005_catalogues.sql","006_transferts.sql","007_inventaires.sql","008_pins.sql","009_verrou.sql","010_qr.sql")) {
       $path = Join-Path $SCHEMA_DIR $f
       Write-Host "==> $f"
       & "$PG\psql.exe" -U postgres -h localhost -p $PORT -d $APPDB -v ON_ERROR_STOP=1 -f $path

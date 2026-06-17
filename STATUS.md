@@ -1,5 +1,5 @@
 # STATUS — BEJ Technologie (Application de gestion)
-> Dernière MAJ : 2026-06-13
+> Dernière MAJ : 2026-06-17
 
 ## 🎯 Objectif de la phase actuelle
 Clôturer le durcissement « mise en production » (sécurité des accès, sauvegarde
@@ -7,6 +7,23 @@ serveur, installabilité) et les périphériques boutique, avant d'attaquer la
 Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
 
 ## ✅ Fait (cette semaine)
+- **Devis auto (data-driven)** — `reparationRepo.devisSuggere(modele, probleme)` calcule la
+  médiane du `total` facturé sur les réparations similaires (fenêtre 12 mois, min 2 cas,
+  repli panne-seule si besoin). Bannière dans « Nouvelle réparation » avec bouton
+  « Utiliser » pour pré-remplir le champ devis. Test E2E dans `suivi_appareil_test` **vert**.
+- **Fonctionnalité « tout-QR »** — étiquettes QR brandées BEJ (habillage **orange**,
+  **code en clair sous le QR** pour saisie manuelle), **préparées en lot** et
+  imprimables au choix (planche **A4** / **rouleau d'étiquettes** / **thermique 57 mm**) :
+  réparation = pool de stickers vierges ; vente = un QR par article (`produits.qr_code`).
+  **Scan universel** (douchette **+ caméra** `mobile_scanner`) : un QR/code-barres →
+  **produit** (ajout à la Vente) ou **appareil** (fiche réparation : appareil +
+  propriétaire + actions). **Intake réparation enrichi** : **photos sous toutes les
+  coutures** + **affectation d'un sticker** à l'appareil. Migration `010_qr.sql`
+  (`appareils.qr_code` + table `etiquettes_qr`) ; `EtiquetteQrRepository`,
+  `util/qr_labels_pdf.dart`, écrans `qr_codes_page`/`scan_page`. **Migration `010`
+  appliquée à la base + SYNC serveur vérifiée** (étiquettes/appareil/produit QR
+  poussés dans PostgreSQL). analyze + build web + `flutter test` + E2E (`qr_labels`
+  **avec push sync**, `phase0`, `finitions`, `suivi_appareil`) : **VERTS.**
 - **Tests E2E dans la CI** — job dédié (PostgreSQL + backend de sync + Chrome sous Xvfb)
   qui rejoue `phase0` / `finitions` / `suivi_appareil` à chaque push : la donnée créée
   hors-ligne est poussée et vérifiée côté serveur. **CI complète verte.**
@@ -53,17 +70,13 @@ Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
   rapprochement caisse, reporting consolidé, Mode Démo.
 
 ## 🚧 En cours
-- [ ] Rien d'actif. Choisir le prochain axe : **Phase 3 (FNE/DGI)** — bloquée tant que
-  les accès/identifiants DGI ne sont pas fournis — ou une brique « smart » offline
-  (devis auto, stock dormant, réassort selon la vitesse de vente).
+- [ ] Rien d'actif. **Tout-QR + Devis auto** livrés, code prêt à committer. Stack down
+  (Postgres non démarré) → relancer avant le commit pour valider `qr_labels_test`.
 
 ## ⏭️ Prochaine étape (la SEULE chose à faire ensuite)
-**Devis auto** : suggérer le prix d'une réparation pour (modèle + panne) d'après
-l'historique local — prolonge l'atelier « intelligent » (pannes fréquentes + pièces
-compatibles déjà en place).
-> Pourquoi celle-ci : 0→2 + durcissement + périphériques + suivi appareil sont livrés ;
-> la Phase 3 (FNE/DGI) dépend d'accès externes → on capitalise d'abord sur le
-> data-driven offline, à forte valeur atelier et sans dépendance.
+**Committer les changements accumulés** : relancer le stack (`restart-stack.ps1`),
+vérifier `qr_labels_test` en vert, puis `git add` + `git commit` (tout-QR + devis auto).
+> Phase 3 (FNE/DGI) bloquée sur accès externes DGI → on finit d'abord la mise en ordre du dépôt.
 
 ## 🧱 Décisions verrouillées
 - Stack figée (cahier v1.1) : client **Flutter** (cible **web**/CanvasKit), base locale
@@ -74,7 +87,7 @@ compatibles déjà en place).
   sous `C:\dev`, lancé via `pg_ctl` (pas de service Windows).
 - Validation = **`flutter analyze` (0 erreur/0 warning) + tests E2E** (`flutter drive`
   + chromedriver).
-- Schéma métier = **migrations SQL numérotées `001`→`009`** (source de vérité, §7 du cahier).
+- Schéma métier = **migrations SQL numérotées `001`→`010`** (source de vérité, §7 du cahier).
 - **PIN haché (PBKDF2, sel = id utilisateur)** + verrouillage — plus de PIN en clair.
 - Périmètre : Phases 0→2 + durcissement + périphériques ; **FNE/DGI = Phase 3** à part
   (dépend d'accès externes DGI).
@@ -86,6 +99,12 @@ compatibles déjà en place).
 - **PostgreSQL instable sur cette machine** : retombe régulièrement (interférence
   antivirus/disque sur `pgdata`), recovery lent (~33 s de fsync). Mitigation :
   **`backend/scripts/restart-stack.ps1`** (relance PG + backend en une commande).
+- **Conflit de port 5432** : une AUTRE installation Postgres
+  (`C:\Users\…\PostgreSQL\data`) peut occuper le 5432 et empêcher le cluster portable
+  `C:\dev\pgdata` (mot de passe `bej_dev_pwd`) de démarrer. **Résolu cette session**
+  (autre instance arrêtée via son `pg_ctl stop` ; portable relancé, backend OK, sync
+  QR vérifiée). Les deux ne peuvent pas tourner ensemble : pour réutiliser l'autre,
+  `db.ps1 stop` puis `pg_ctl start -D "C:\Users\…\PostgreSQL\data"`.
 - **Pas de down-sync temps réel** (streaming PowerSync non activé) : un poste ne voit
   pas en direct les données d'un autre (ex. conflit « caisse déjà ouverte » résolu à la main).
 - **PIN à 4 chiffres** : petit espace de clés ; le verrouillage atténue mais une vraie

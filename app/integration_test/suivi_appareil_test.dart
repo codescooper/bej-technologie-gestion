@@ -92,6 +92,15 @@ void main() {
     expect(freq, isNotEmpty);
     expect(freq.first, 'Écran cassé');
 
+    // Devis auto : médiane du total des réparations similaires
+    // (iPhone 11 + Écran cassé = 15000, au moins 2 cas, sans repli).
+    final devis = await reparationRepo.devisSuggere(
+        modele: 'iPhone 11', probleme: 'Écran cassé');
+    expect(devis, isNotNull);
+    expect(devis!.prix, 15000);
+    expect(devis.nbCas, greaterThanOrEqualTo(2));
+    expect(devis.elargi, isFalse);
+
     debugPrint('SUIVI_APPAREIL_OK reparations=$n historique=${histo.length} '
         'garantie=${garantie != null} topPanne=${freq.first}');
   });
