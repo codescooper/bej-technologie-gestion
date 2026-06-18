@@ -7,12 +7,14 @@ import '../data/repositories/vente_repository.dart';
 import '../data/repositories/client_repository.dart';
 import '../data/repositories/retour_repository.dart';
 import '../data/repositories/avoir_repository.dart';
+import '../data/repositories/phase3_repository.dart';
 import '../models/produit.dart';
 import '../models/caisse.dart';
 import '../models/client.dart';
 import '../models/vente.dart';
 import '../util/format.dart';
 import '../util/ticket_pdf.dart';
+import '../services/fne_service.dart';
 import 'widgets/paiement_dialog.dart';
 import 'retour_page.dart';
 
@@ -27,6 +29,8 @@ class VentePage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onVente;
   final ValueNotifier<ProduitStock?>? produitInjecte;
+  final FneService? fneService;
+  final Phase3Repository? phase3Repo;
 
   const VentePage({
     super.key,
@@ -39,6 +43,8 @@ class VentePage extends StatefulWidget {
     required this.session,
     required this.onVente,
     this.produitInjecte,
+    this.fneService,
+    this.phase3Repo,
   });
 
   @override
@@ -62,6 +68,14 @@ class _VentePageState extends State<VentePage> {
   void initState() {
     super.initState();
     widget.produitInjecte?.addListener(_consommerInjection);
+    _chargerMultiplicateur();
+  }
+
+  Future<void> _chargerMultiplicateur() async {
+    final m = await widget.phase3Repo
+            ?.multiplicateurJetonsActif(widget.session.magasinId) ??
+        1.0;
+    if (mounted) setState(() => _multiplicateur = m);
   }
 
   /// Produit envoyé par le scan universel : ajout au panier, puis on vide le
@@ -89,7 +103,9 @@ class _VentePageState extends State<VentePage> {
     return t < 0 ? 0 : t;
   }
 
-  int get _jetonsGagnes => (_total ~/ 100);
+  double _multiplicateur = 1.0;
+
+  int get _jetonsGagnes => ((_total ~/ 100) * _multiplicateur).round();
 
   void _addProduit(ProduitStock ps) {
     final dispo = ps.quantiteDispo;
@@ -349,8 +365,12 @@ class _VentePageState extends State<VentePage> {
           if (_jetonsGagnes > 0)
             Align(
               alignment: Alignment.centerRight,
-              child: Text('+ $_jetonsGagnes jetons gagnés',
-                  style: TextStyle(color: Colors.green.shade700, fontSize: 12)),
+              child: Text(
+                _multiplicateur > 1.0
+                    ? '+ $_jetonsGagnes jetons × ${_multiplicateur.toStringAsFixed(1)} 🎉'
+                    : '+ $_jetonsGagnes jetons gagnés',
+                style: TextStyle(color: Colors.green.shade700, fontSize: 12),
+              ),
             ),
           const SizedBox(height: 8),
           SizedBox(
@@ -496,7 +516,34 @@ class _VentePageState extends State<VentePage> {
       avoirId: _avoirUtilise > 0 ? _avoirId : null,
       avoirUtilise: _avoirUtilise,
       paiements: paiements,
+      multiplicateurJetons: _multiplicateur,
     );
+
+    // FNE/DGI : soumission asynchrone, non bloquante
+    if (widget.fneService != null) {
+      widget.fneService!.soumettre(
+        transactionId: result.transactionId,
+        magasinId: widget.session.magasinId,
+        total: result.total,
+        date: DateTime.now(),
+        clientNom: _client?.nom,
+        lignes: _cart
+            .map((l) => (
+                  libelle: l.produit.nom,
+                  quantite: l.quantite,
+                  prixUnitaire: l.prixUnitaire,
+                ))
+            .toList(),
+      ).then((fne) {
+        if (!mounted) return;
+        if (fne?.numeroFacture != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Facture DGI : ${fne!.numeroFacture}'),
+            backgroundColor: Colors.green.shade700,
+          ));
+        }
+      });
+    }
 
     // Capture les données du ticket AVANT la réinitialisation du panier.
     final ticket = TicketData(

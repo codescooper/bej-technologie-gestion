@@ -11,6 +11,7 @@ import '../models/reparation.dart';
 import '../models/produit.dart';
 import '../models/vente.dart';
 import '../util/format.dart';
+import '../services/notification_service.dart';
 import 'widgets/paiement_dialog.dart';
 
 /// Détail d'une réparation : statut, diagnostic, pièces, photos, encaissement.
@@ -21,6 +22,7 @@ class ReparationDetailPage extends StatefulWidget {
   final CaisseRepository caisseRepo;
   final PhotoRepository photoRepo;
   final AppSession session;
+  final NotificationService? notifService;
 
   const ReparationDetailPage({
     super.key,
@@ -30,6 +32,7 @@ class ReparationDetailPage extends StatefulWidget {
     required this.caisseRepo,
     required this.photoRepo,
     required this.session,
+    this.notifService,
   });
 
   @override
@@ -74,7 +77,7 @@ class _ReparationDetailPageState extends State<ReparationDetailPage> {
               if (it.clientNom != null) Text('Client : ${it.clientNom}'),
               if (it.imei != null) Text('IMEI : ${it.imei}'),
               const SizedBox(height: 12),
-              _statutSelector(r),
+              _statutSelector(r, it),
               const Divider(height: 24),
               if (r.probleme != null) _info('Problème', r.probleme!),
               if (r.etatVisuel != null) _info('État à la réception', r.etatVisuel!),
@@ -182,7 +185,7 @@ class _ReparationDetailPageState extends State<ReparationDetailPage> {
     );
   }
 
-  Widget _statutSelector(Reparation r) {
+  Widget _statutSelector(Reparation r, ReparationListItem item) {
     final statuts = [...StatutReparation.ordre, StatutReparation.annule];
     return Row(
       children: [
@@ -195,10 +198,18 @@ class _ReparationDetailPageState extends State<ReparationDetailPage> {
                   value: s, child: Text(StatutReparation.libelle(s))))
               .toList(),
           onChanged: (s) async {
-            if (s != null) {
-              await widget.reparationRepo.changerStatut(r.id, s);
-              _reload();
-            }
+            if (s == null) return;
+            await widget.reparationRepo.changerStatut(r.id, s);
+            _reload();
+            widget.notifService?.notifierChangementStatut(
+              magasinId: widget.session.magasinId,
+              magasinNom: widget.session.magasinNom,
+              clientId: item.clientId,
+              appareilLibelle: item.appareilLibelle.isEmpty
+                  ? 'votre appareil'
+                  : item.appareilLibelle,
+              statut: s,
+            );
           },
         ),
       ],

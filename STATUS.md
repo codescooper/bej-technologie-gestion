@@ -1,12 +1,26 @@
 # STATUS — BEJ Technologie (Application de gestion)
-> Dernière MAJ : 2026-06-17
+> Dernière MAJ : 2026-06-18 (Phase 3 implémentée)
 
 ## 🎯 Objectif de la phase actuelle
-Clôturer le durcissement « mise en production » (sécurité des accès, sauvegarde
-serveur, installabilité) et les périphériques boutique, avant d'attaquer la
-Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
+**Phase 3 (FNE/DGI + Notifications + Fidélité)** — Services métier avancés implémentés
+(migration 011, repos, services, UI Paramètres, campagnes). FNE/DGI configurable
+mais non activé (endpoint DGI fictif à remplacer). App pleinement fonctionnelle sans
+ces services (pattern nullable).
 
 ## ✅ Fait (cette semaine)
+- **Phase 3 — FNE/DGI préparé** — migration `011_phase3.sql` (`config_fne`,
+  `factures_fne`, `config_notifications`, `notifications_log`, `campagnes_fidelite`).
+  `Phase3Repository`, `FneService` (HTTP POST fire-and-forget, logs dans SQLite, jamais
+  bloquant), écran **Paramètres** 3 onglets (FNE/Notifications/Fidélité) accessible
+  responsables. Endpoint/merchant_id/api_key configurables depuis l'app — **non activé
+  tant que DGI ne fournit pas l'API officielle**.
+- **Phase 3 — Notifications SMS/WhatsApp (Twilio)** — `NotificationService` ; envoi
+  automatique au changement de statut réparation (reçu/prêt/livré) ; config Twilio
+  dans l'écran Paramètres ; canal WhatsApp optionnel (`whatsapp:` préfixe).
+- **Phase 3 — Campagnes fidélité (multiplicateur jetons)** — `campagnes_fidelite` +
+  `Phase3Repository.multiplicateurJetonsActif` ; `VentePage` affiche le multiplicateur
+  actif et l'applique au calcul des jetons ; `VenteRepository.enregistrerVente` reçoit
+  `multiplicateurJetons` (défaut 1.0). Gestion CRUD des campagnes dans Paramètres.
 - **Devis auto (data-driven)** — `reparationRepo.devisSuggere(modele, probleme)` calcule la
   médiane du `total` facturé sur les réparations similaires (fenêtre 12 mois, min 2 cas,
   repli panne-seule si besoin). Bannière dans « Nouvelle réparation » avec bouton
@@ -70,13 +84,11 @@ Phase 3 (FNE/DGI) — les Phases 0/1/2 étant livrées et validées.
   rapprochement caisse, reporting consolidé, Mode Démo.
 
 ## 🚧 En cours
-- [ ] Rien d'actif. **Tout-QR + Devis auto** livrés, code prêt à committer. Stack down
-  (Postgres non démarré) → relancer avant le commit pour valider `qr_labels_test`.
+- [ ] Rien d'actif. **Phase 3** implémentée et compilée (analyze vert, build web OK).
+  Migration `011_phase3.sql` à appliquer sur le cluster local (`db.ps1 schema`).
 
 ## ⏭️ Prochaine étape (la SEULE chose à faire ensuite)
-**Committer les changements accumulés** : relancer le stack (`restart-stack.ps1`),
-vérifier `qr_labels_test` en vert, puis `git add` + `git commit` (tout-QR + devis auto).
-> Phase 3 (FNE/DGI) bloquée sur accès externes DGI → on finit d'abord la mise en ordre du dépôt.
+**Pousser sur GitHub** (`git push`) puis attendre que la CI vire au vert sur le commit Phase 3.
 
 ## 🧱 Décisions verrouillées
 - Stack figée (cahier v1.1) : client **Flutter** (cible **web**/CanvasKit), base locale
@@ -87,7 +99,7 @@ vérifier `qr_labels_test` en vert, puis `git add` + `git commit` (tout-QR + dev
   sous `C:\dev`, lancé via `pg_ctl` (pas de service Windows).
 - Validation = **`flutter analyze` (0 erreur/0 warning) + tests E2E** (`flutter drive`
   + chromedriver).
-- Schéma métier = **migrations SQL numérotées `001`→`010`** (source de vérité, §7 du cahier).
+- Schéma métier = **migrations SQL numérotées `001`→`011`** (source de vérité, §7 du cahier).
 - **PIN haché (PBKDF2, sel = id utilisateur)** + verrouillage — plus de PIN en clair.
 - Périmètre : Phases 0→2 + durcissement + périphériques ; **FNE/DGI = Phase 3** à part
   (dépend d'accès externes DGI).

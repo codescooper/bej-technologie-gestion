@@ -28,6 +28,10 @@ import 'vente_page.dart';
 import 'reparations_page.dart';
 import 'guide_page.dart';
 import 'demo_page.dart';
+import '../data/repositories/phase3_repository.dart';
+import '../services/fne_service.dart';
+import '../services/notification_service.dart';
+import 'parametres_page.dart';
 import 'scan_page.dart';
 import 'qr_codes_page.dart';
 
@@ -50,6 +54,9 @@ class AppShell extends StatefulWidget {
   final InventaireRepository inventaireRepo;
   final EtiquetteQrRepository? etiquetteRepo;
   final DemoController? demoController;
+  final Phase3Repository? phase3Repo;
+  final FneService? fneService;
+  final NotificationService? notifService;
   final SyncService syncService;
   final ApiClient api;
 
@@ -71,6 +78,9 @@ class AppShell extends StatefulWidget {
     required this.inventaireRepo,
     this.etiquetteRepo,
     this.demoController,
+    this.phase3Repo,
+    this.fneService,
+    this.notifService,
     required this.syncService,
     required this.api,
   });
@@ -164,6 +174,8 @@ class _AppShellState extends State<AppShell> {
             session: widget.session,
             onVente: _refresh,
             produitInjecte: _injecterVente,
+            fneService: widget.fneService,
+            phase3Repo: widget.phase3Repo,
           ),
           ReparationsPage(
             reparationRepo: widget.reparationRepo,
@@ -174,6 +186,7 @@ class _AppShellState extends State<AppShell> {
             photoRepo: widget.photoRepo,
             catalogueRepo: widget.catalogueRepo,
             etiquetteRepo: widget.etiquetteRepo,
+            notifService: widget.notifService,
             session: widget.session,
           ),
         ];
@@ -204,6 +217,7 @@ class _AppShellState extends State<AppShell> {
                           caisseRepo: widget.caisseRepo,
                           photoRepo: widget.photoRepo,
                           session: widget.session,
+                          notifService: widget.notifService,
                         ),
                       ),
                     );
@@ -266,6 +280,20 @@ class _AppShellState extends State<AppShell> {
                     ),
                   ),
                   icon: const Icon(Icons.slideshow),
+                ),
+              if (widget.phase3Repo != null &&
+                  widget.session.peutGererQrCodes)
+                IconButton(
+                  tooltip: 'Paramètres (FNE, Notifications, Fidélité)',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ParametresPage(
+                        session: widget.session,
+                        phase3Repo: widget.phase3Repo!,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.settings),
                 ),
               IconButton(
                 tooltip: 'Guide d\'utilisation',

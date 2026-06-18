@@ -19,7 +19,10 @@ import 'src/data/repositories/transfert_repository.dart';
 import 'src/data/repositories/inventaire_repository.dart';
 import 'src/data/repositories/etiquette_qr_repository.dart';
 import 'src/data/repositories/auth_repository.dart';
+import 'src/data/repositories/phase3_repository.dart';
 import 'src/data/demo_controller.dart';
+import 'src/services/fne_service.dart';
+import 'src/services/notification_service.dart';
 import 'src/ui/app_shell.dart';
 import 'src/ui/login_page.dart';
 
@@ -56,6 +59,9 @@ Future<void> main() async {
     transfertRepo: TransfertRepository(db),
     inventaireRepo: InventaireRepository(db),
     etiquetteRepo: EtiquetteQrRepository(db),
+    phase3Repo: Phase3Repository(db),
+    fneService: FneService(db),
+    notifService: NotificationService(db),
     demoController: DemoController(
       db: db,
       session: session,
@@ -93,6 +99,9 @@ class BejApp extends StatelessWidget {
   final TransfertRepository transfertRepo;
   final InventaireRepository inventaireRepo;
   final EtiquetteQrRepository? etiquetteRepo;
+  final Phase3Repository? phase3Repo;
+  final FneService? fneService;
+  final NotificationService? notifService;
   final DemoController? demoController;
   final SyncService syncService;
   final ApiClient api;
@@ -115,6 +124,9 @@ class BejApp extends StatelessWidget {
     required this.transfertRepo,
     required this.inventaireRepo,
     this.etiquetteRepo,
+    this.phase3Repo,
+    this.fneService,
+    this.notifService,
     this.demoController,
     required this.syncService,
     required this.api,
@@ -151,6 +163,9 @@ class BejApp extends StatelessWidget {
             transfertRepo: transfertRepo,
             inventaireRepo: inventaireRepo,
             etiquetteRepo: etiquetteRepo,
+            phase3Repo: phase3Repo,
+            fneService: fneService,
+            notifService: notifService,
             demoController: demoController,
             syncService: syncService,
             api: api,

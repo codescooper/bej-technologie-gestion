@@ -6,6 +6,7 @@ import '../data/repositories/caisse_repository.dart';
 import '../data/repositories/reparation_repository.dart';
 import '../data/repositories/photo_repository.dart';
 import '../models/reparation.dart';
+import '../services/notification_service.dart';
 import 'reparation_detail_page.dart';
 import 'scan_camera.dart';
 
@@ -24,6 +25,7 @@ class ScanPage extends StatefulWidget {
   final CaisseRepository caisseRepo;
   final PhotoRepository photoRepo;
   final AppSession session;
+  final NotificationService? notifService;
 
   const ScanPage({
     super.key,
@@ -33,6 +35,7 @@ class ScanPage extends StatefulWidget {
     required this.caisseRepo,
     required this.photoRepo,
     required this.session,
+    this.notifService,
   });
 
   @override
@@ -138,6 +141,7 @@ class _ScanPageState extends State<ScanPage> {
         caisseRepo: widget.caisseRepo,
         photoRepo: widget.photoRepo,
         session: widget.session,
+        notifService: widget.notifService,
       ),
     ));
     if (mounted) _focus.requestFocus();

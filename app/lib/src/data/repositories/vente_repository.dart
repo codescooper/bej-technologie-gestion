@@ -30,6 +30,7 @@ class VenteRepository {
     String? avoirId,
     num avoirUtilise = 0,
     required List<PaiementInput> paiements,
+    double multiplicateurJetons = 1.0,
   }) async {
     if (lignes.isEmpty) {
       throw ArgumentError('Le panier est vide.');
@@ -37,7 +38,7 @@ class VenteRepository {
     final sousTotal = lignes.fold<num>(0, (s, l) => s + l.sousTotal);
     final total = math.max<num>(
         0, sousTotal - remiseGlobale - jetonsUtilises - avoirUtilise);
-    final jetonsGagnes = (total ~/ 100); // 100 FCFA = 1 jeton
+    final jetonsGagnes = ((total ~/ 100) * multiplicateurJetons).round();
 
     final txId = _uuid.v4();
     final now = DateTime.now().toUtc().toIso8601String();

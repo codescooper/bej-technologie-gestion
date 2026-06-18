@@ -293,4 +293,65 @@ final schema = Schema([
     Index('etiquettes_qr_code', [IndexedColumn('code')]),
     Index('etiquettes_qr_magasin', [IndexedColumn('magasin_id')]),
   ]),
+
+  // ---- Phase 3 : FNE/DGI ----
+  Table('config_fne', [
+    Column.text('magasin_id'),
+    Column.integer('actif'),
+    Column.text('endpoint_url'),
+    Column.text('merchant_id'),
+    Column.text('api_key'),
+    Column.text('numero_contrib'),
+  ], indexes: [
+    Index('config_fne_magasin', [IndexedColumn('magasin_id')]),
+  ]),
+  Table('factures_fne', [
+    Column.text('transaction_id'),
+    Column.text('magasin_id'),
+    Column.text('numero_facture'),
+    Column.text('qr_code_fiscal'),
+    Column.text('statut'),
+    Column.text('date_emission'),
+    Column.text('erreur'),
+  ], indexes: [
+    Index('factures_fne_magasin', [IndexedColumn('magasin_id')]),
+  ]),
+
+  // ---- Phase 3 : Notifications SMS/WhatsApp ----
+  Table('config_notifications', [
+    Column.text('magasin_id'),
+    Column.integer('actif'),
+    Column.text('provider'),
+    Column.text('account_sid'),
+    Column.text('auth_token'),
+    Column.text('from_number'),
+    Column.integer('utiliser_whatsapp'),
+  ], indexes: [
+    Index('config_notif_magasin', [IndexedColumn('magasin_id')]),
+  ]),
+  Table('notifications_log', [
+    Column.text('client_id'),
+    Column.text('magasin_id'),
+    Column.text('canal'),
+    Column.text('numero'),
+    Column.text('message'),
+    Column.text('statut'),
+    Column.text('date_envoi'),
+    Column.text('erreur'),
+  ], indexes: [
+    Index('notifications_log_magasin', [IndexedColumn('magasin_id')]),
+  ]),
+
+  // ---- Phase 3 : Campagnes fidélité ----
+  Table('campagnes_fidelite', [
+    Column.text('magasin_id'),
+    Column.text('nom'),
+    Column.real('multiplicateur'),
+    Column.text('date_debut'),
+    Column.text('date_fin'),
+    Column.integer('actif'),
+    Column.text('description'),
+  ], indexes: [
+    Index('campagnes_fidelite_magasin', [IndexedColumn('magasin_id')]),
+  ]),
 ]);

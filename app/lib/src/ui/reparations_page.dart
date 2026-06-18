@@ -12,6 +12,7 @@ import '../data/repositories/photo_repository.dart';
 import '../data/repositories/catalogue_repository.dart';
 import '../data/repositories/etiquette_qr_repository.dart';
 import '../models/reparation.dart';
+import '../services/notification_service.dart';
 import '../models/client.dart';
 import '../models/appareil.dart';
 import '../util/format.dart';
@@ -29,6 +30,7 @@ class ReparationsPage extends StatefulWidget {
   final PhotoRepository photoRepo;
   final CatalogueRepository catalogueRepo;
   final EtiquetteQrRepository? etiquetteRepo;
+  final NotificationService? notifService;
   final AppSession session;
 
   const ReparationsPage({
@@ -41,6 +43,7 @@ class ReparationsPage extends StatefulWidget {
     required this.photoRepo,
     required this.catalogueRepo,
     this.etiquetteRepo,
+    this.notifService,
     required this.session,
   });
 
@@ -157,6 +160,7 @@ class _ReparationsPageState extends State<ReparationsPage> {
           caisseRepo: widget.caisseRepo,
           photoRepo: widget.photoRepo,
           session: widget.session,
+          notifService: widget.notifService,
         ),
       )),
     );
