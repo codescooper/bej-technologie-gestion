@@ -12,6 +12,7 @@ class DashboardData {
   final num caisseTheoriqueCash;
   final num caisseTheoriqueMobile;
   final int jetonsDistribues;
+  final num remisesNegociees;
 
   DashboardData({
     required this.caVentes,
@@ -24,6 +25,7 @@ class DashboardData {
     required this.caisseTheoriqueCash,
     required this.caisseTheoriqueMobile,
     required this.jetonsDistribues,
+    this.remisesNegociees = 0,
   });
 
   num get caTotal => caVentes + caReparations;
@@ -230,6 +232,16 @@ class DashboardRepository {
     );
     final jetons = ((jetonRows.first['s'] as num?) ?? 0).toInt();
 
+    // Remises accordées par négociation de prix (remise_ligne des ventes du jour).
+    final remiseNegoRows = await db.getAll(
+      'SELECT COALESCE(SUM(lt.remise_ligne), 0) AS s '
+      'FROM lignes_transaction lt '
+      'JOIN transactions t ON t.id = lt.transaction_id '
+      "WHERE t.magasin_id = ? AND t.type = 'vente' AND t.date >= ?",
+      [magasinId, debutJour],
+    );
+    final remisesNegociees = (remiseNegoRows.first['s'] as num?) ?? 0;
+
     return DashboardData(
       caVentes: caVentes,
       caReparations: caReparations,
@@ -241,6 +253,7 @@ class DashboardRepository {
       caisseTheoriqueCash: cash,
       caisseTheoriqueMobile: mobile,
       jetonsDistribues: jetons,
+      remisesNegociees: remisesNegociees,
     );
   }
 }

@@ -103,6 +103,10 @@ class _VentePageState extends State<VentePage> {
     return t < 0 ? 0 : t;
   }
 
+  // Total des remises implicites accordées par négociation sur ce panier.
+  num get _remiseNego =>
+      _cart.fold<num>(0, (s, l) => s + (l.prixCatalogue - l.prixUnitaire) * l.quantite);
+
   double _multiplicateur = 1.0;
 
   int get _jetonsGagnes => ((_total ~/ 100) * _multiplicateur).round();
@@ -266,14 +270,45 @@ class _VentePageState extends State<VentePage> {
               ? const Center(child: Text('Panier vide — touchez un produit.'))
               : ListView(
                   children: _cart.map((l) {
+                    final negocie = l.prixNegocie != null &&
+                        l.prixNegocie! < l.prixCatalogue;
                     return ListTile(
                       dense: true,
                       title: Text(l.produit.nom),
-                      subtitle: Text(
-                          '${fcfa(l.prixUnitaire)} × ${l.quantite} = ${fcfa(l.sousTotal)}'),
+                      subtitle: negocie
+                          ? Wrap(
+                              children: [
+                                Text(
+                                  '${fcfa(l.prixCatalogue)} ',
+                                  style: const TextStyle(
+                                    decoration: TextDecoration.lineThrough,
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  '→ ${fcfa(l.prixUnitaire)} × ${l.quantite} = ${fcfa(l.sousTotal)}',
+                                  style: TextStyle(
+                                      color: Colors.orange.shade800,
+                                      fontSize: 12),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              '${fcfa(l.prixUnitaire)} × ${l.quantite} = ${fcfa(l.sousTotal)}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            onPressed: () => _setPrixNegocie(l),
+                            icon: Icon(Icons.price_change_outlined,
+                                size: 18,
+                                color: negocie
+                                    ? Colors.orange.shade800
+                                    : Colors.grey.shade400),
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Prix négocié',
+                          ),
                           IconButton(
                               onPressed: () => _changeQty(l, -1),
                               icon: const Icon(Icons.remove_circle_outline)),
@@ -357,6 +392,9 @@ class _VentePageState extends State<VentePage> {
       child: Column(
         children: [
           _ligne('Sous-total', fcfa(_sousTotal)),
+          if (_remiseNego > 0)
+            _ligne('Remise négociée', '- ${fcfa(_remiseNego)}',
+                color: Colors.orange.shade800),
           if (_remiseGlobale > 0) _ligne('Remise', '- ${fcfa(_remiseGlobale)}'),
           if (_jetonsUtilises > 0) _ligne('Jetons', '- ${fcfa(_jetonsUtilises)}'),
           if (_avoirUtilise > 0) _ligne('Avoir', '- ${fcfa(_avoirUtilise)}'),
@@ -390,10 +428,12 @@ class _VentePageState extends State<VentePage> {
     );
   }
 
-  Widget _ligne(String l, String v, {bool bold = false}) {
+  Widget _ligne(String l, String v, {bool bold = false, Color? color}) {
     final st = bold
-        ? const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-        : null;
+        ? TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)
+        : color != null
+            ? TextStyle(color: color)
+            : null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -401,6 +441,22 @@ class _VentePageState extends State<VentePage> {
         children: [Text(l, style: st), Text(v, style: st)],
       ),
     );
+  }
+
+  /// Dialogue pour saisir le prix négocié sur une ligne de panier.
+  Future<void> _setPrixNegocie(CartLine l) async {
+    final defaut = (l.prixNegocie ?? l.prixCatalogue).toInt().toString();
+    final ctrl = TextEditingController(text: defaut);
+    final v = await _askNumber(
+        'Prix négocié (catalogue : ${fcfa(l.prixCatalogue)})', ctrl);
+    if (v == null) return;
+    setState(() {
+      if (v <= 0 || v >= l.prixCatalogue) {
+        l.prixNegocie = null; // pas de négociation ou prix >= catalogue
+      } else {
+        l.prixNegocie = v;
+      }
+    });
   }
 
   Future<void> _pickClient() async {

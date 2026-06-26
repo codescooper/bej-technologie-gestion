@@ -86,6 +86,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   const SizedBox(width: 12),
                   Expanded(child: _jetonsCard(d)),
                 ]),
+                if (d.remisesNegociees > 0) ...[
+                  const SizedBox(height: 12),
+                  _remisesNegCard(d),
+                ],
                 const SizedBox(height: 12),
                 _caisseCard(d),
               ],
@@ -217,6 +221,37 @@ class _DashboardPageState extends State<DashboardPage> {
                     .headlineSmall
                     ?.copyWith(fontWeight: FontWeight.bold)),
             const Text('jetons distribués', style: TextStyle(fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _remisesNegCard(DashboardData d) {
+    return Card(
+      color: Colors.orange.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.price_change_outlined, color: Colors.orange.shade800),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Remises accordées (négociations)',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(fcfa(d.remisesNegociees),
+                      style: TextStyle(
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18)),
+                  Text('Total des réductions accordées aux clients ce jour',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
           ],
         ),
       ),

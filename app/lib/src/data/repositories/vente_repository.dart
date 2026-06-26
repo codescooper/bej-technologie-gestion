@@ -69,10 +69,13 @@ class VenteRepository {
 
       // 2 + 3. Lignes + mouvements de stock + décrément
       for (final l in lignes) {
+        // remise_ligne = remise explicite + remise implicite (négociation de prix)
+        final remiseLigneTotale =
+            l.remiseLigne + (l.prixCatalogue - l.prixUnitaire) * l.quantite;
         await tx.execute(
           'INSERT INTO lignes_transaction(id, transaction_id, produit_id, '
           'quantite, prix_unitaire, remise_ligne) VALUES(?,?,?,?,?,?)',
-          [_uuid.v4(), txId, l.produit.id, l.quantite, l.prixUnitaire, l.remiseLigne],
+          [_uuid.v4(), txId, l.produit.id, l.quantite, l.prixUnitaire, remiseLigneTotale],
         );
         await tx.execute(
           'INSERT INTO mouvements_stock(id, produit_id, magasin_id, type, '

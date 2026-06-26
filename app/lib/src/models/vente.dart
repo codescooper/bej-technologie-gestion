@@ -5,10 +5,13 @@ class CartLine {
   final Produit produit;
   int quantite;
   num remiseLigne;
+  num? prixNegocie; // null = prix catalogue ; < prixCatalogue = négociation
 
-  CartLine(this.produit, {this.quantite = 1, this.remiseLigne = 0});
+  CartLine(this.produit,
+      {this.quantite = 1, this.remiseLigne = 0, this.prixNegocie});
 
-  num get prixUnitaire => produit.prixVente;
+  num get prixCatalogue => produit.prixVente;
+  num get prixUnitaire => prixNegocie ?? produit.prixVente;
   num get sousTotal => prixUnitaire * quantite - remiseLigne;
 }
 

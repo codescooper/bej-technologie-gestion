@@ -8,6 +8,11 @@ mais non activé (endpoint DGI fictif à remplacer). App pleinement fonctionnell
 ces services (pattern nullable).
 
 ## ✅ Fait (cette semaine)
+- **Prix négocié à la vente** — bouton ✏️ (icône `price_change`) par ligne de panier :
+  saisie du prix négocié, affichage en orange avec barré sur le prix catalogue, ligne
+  « Remise négociée » dans le sous-total. `remise_ligne` en base = remise implicite
+  enregistrée. Dashboard : carte « Remises accordées » visible quand > 0 FCFA le jour.
+  `flutter analyze` : 0 erreur (infos préexistants).
 - **Phase 3 — FNE/DGI préparé** — migration `011_phase3.sql` (`config_fne`,
   `factures_fne`, `config_notifications`, `notifications_log`, `campagnes_fidelite`).
   `Phase3Repository`, `FneService` (HTTP POST fire-and-forget, logs dans SQLite, jamais
@@ -84,11 +89,11 @@ ces services (pattern nullable).
   rapprochement caisse, reporting consolidé, Mode Démo.
 
 ## 🚧 En cours
-- [ ] Rien d'actif. **Phase 3** implémentée et compilée (analyze vert, build web OK).
-  Migration `011_phase3.sql` à appliquer sur le cluster local (`db.ps1 schema`).
+- [ ] Rien d'actif.
 
 ## ⏭️ Prochaine étape (la SEULE chose à faire ensuite)
-**Pousser sur GitHub** (`git push`) puis attendre que la CI vire au vert sur le commit Phase 3.
+**Connecter les credentials réels** (Twilio account_sid/token et endpoint DGI) dans
+l'écran ⚙️ Paramètres pour activer les notifications SMS/WhatsApp et la soumission FNE.
 
 ## 🧱 Décisions verrouillées
 - Stack figée (cahier v1.1) : client **Flutter** (cible **web**/CanvasKit), base locale
