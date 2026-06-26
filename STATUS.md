@@ -8,6 +8,14 @@ mais non activé (endpoint DGI fictif à remplacer). App pleinement fonctionnell
 ces services (pattern nullable).
 
 ## ✅ Fait (cette semaine)
+- **Sécurisation production (26/06/2026)** — 8 corrections critiques/importantes :
+  CORS restreint à `BEJ_CORS_ORIGIN` (env var, plus de `*`) ; auth `/upload` par token
+  Bearer (`BEJ_UPLOAD_TOKEN`, gated — inactif en dev) ; headers sécurité HTTP
+  (`X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`) ; config PG
+  externalisée en env vars (`DB_HOST/PORT/NAME/USER`) ; `queryTimeout` 30 s ; PIN démo
+  masqués en prod (`kDebugMode`) ; validation photos (type + taille max 5 Mo) ;
+  messages d'exception génériques en réponse HTTP (`dart compile kernel` OK ;
+  `flutter analyze` 0 erreur).
 - **Prix négocié à la vente** — bouton ✏️ (icône `price_change`) par ligne de panier :
   saisie du prix négocié, affichage en orange avec barré sur le prix catalogue, ligne
   « Remise négociée » dans le sous-total. `remise_ligne` en base = remise implicite

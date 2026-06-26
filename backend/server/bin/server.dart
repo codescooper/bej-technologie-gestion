@@ -6,41 +6,70 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 
-/// Backend de synchronisation BEJ — Phase 0.
-///
-/// Reçoit les lots d'opérations CRUD poussés par l'app (file PowerSync) et les
-/// applique au PostgreSQL serveur. C'est le « côté serveur » du critère Phase 0.
+/// Backend de synchronisation BEJ.
 ///
 /// Endpoints :
-///   GET  /health   -> sonde de disponibilité (indicateur online/offline app)
-///   POST /upload   -> applique un lot { batch: [ {op, table, id, data}, ... ] }
+///   GET  /health   → sonde de disponibilité
+///   POST /upload   → applique un lot { batch: [ {op, table, id, data}, … ] }
 ///
-/// Connexion Postgres (dev local, voir backend/scripts/db.ps1).
-const _pgEndpoint = (
-  host: 'localhost',
-  port: 5432,
-  database: 'bej',
-  username: 'postgres',
-);
+/// Configuration (variables d'environnement) :
+///   PGPASSWORD        Mot de passe PostgreSQL     — obligatoire en prod
+///   DB_HOST           Hôte PostgreSQL              (défaut : localhost)
+///   DB_PORT           Port PostgreSQL               (défaut : 5432)
+///   DB_NAME           Nom de la base               (défaut : bej)
+///   DB_USER           Utilisateur PostgreSQL        (défaut : postgres)
+///   HOST              Adresse d'écoute du serveur  (défaut : localhost)
+///   PORT              Port d'écoute du serveur     (défaut : 8080)
+///   BEJ_CORS_ORIGIN   Origine CORS autorisée       (défaut : http://localhost:5000)
+///   BEJ_UPLOAD_TOKEN  Token Bearer pour /upload    (absent → pas d'auth, mode dev)
 
 late Connection _db;
 
 /// table -> { colonne -> type de cast Postgres }, chargé au démarrage.
 final Map<String, Map<String, String>> _schemaCache = {};
 
-const _corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept',
-};
+// ─── Helpers configuration ────────────────────────────────────────────────────
 
+/// Lit une variable d'environnement ; retourne [fallback] si absente ou vide.
+String _env(String key, String fallback) {
+  final v = Platform.environment[key];
+  return (v != null && v.isNotEmpty) ? v : fallback;
+}
+
+/// Retourne la valeur de la variable ou null si absente/vide.
+String? _envOpt(String key) {
+  final v = Platform.environment[key];
+  return (v != null && v.isNotEmpty) ? v : null;
+}
+
+// ─── Middlewares ──────────────────────────────────────────────────────────────
+
+/// CORS restreint à l'origine déclarée (BEJ_CORS_ORIGIN).
 Middleware _cors() => (handler) => (req) async {
-      if (req.method == 'OPTIONS') {
-        return Response.ok('', headers: _corsHeaders);
-      }
+      final origin = _env('BEJ_CORS_ORIGIN', 'http://localhost:5000');
+      final corsH = {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers':
+            'Origin, Content-Type, Accept, Authorization',
+      };
+      if (req.method == 'OPTIONS') return Response.ok('', headers: corsH);
       final res = await handler(req);
-      return res.change(headers: {...res.headers, ..._corsHeaders});
+      return res.change(headers: {...res.headers, ...corsH});
     };
+
+/// Headers de sécurité HTTP de base (X-Content-Type-Options, X-Frame-Options…).
+Middleware _securityHeaders() => (handler) => (req) async {
+      final res = await handler(req);
+      return res.change(headers: {
+        ...res.headers,
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+      });
+    };
+
+// ─── Helpers SQL ──────────────────────────────────────────────────────────────
 
 /// Mappe le type natif Postgres (udt_name) vers un type de cast textuel.
 String _castType(String udt) {
@@ -94,7 +123,21 @@ String _stringify(Object value) {
   return value.toString();
 }
 
+// ─── Handlers ─────────────────────────────────────────────────────────────────
+
 Future<Response> _upload(Request req) async {
+  // Auth par token Bearer — activée uniquement si BEJ_UPLOAD_TOKEN est défini.
+  final token = _envOpt('BEJ_UPLOAD_TOKEN');
+  if (token != null) {
+    final auth = req.headers['authorization'] ?? '';
+    if (auth != 'Bearer $token') {
+      return Response.forbidden(
+        jsonEncode({'error': 'Non autorisé'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
   try {
     final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
     final batch = (body['batch'] as List).cast<Map<String, dynamic>>();
@@ -112,11 +155,7 @@ Future<Response> _upload(Request req) async {
         final msg = e.toString();
         // 23505 = conflit de clé naturelle (doublon offline, §2.6).
         // 23503 = violation de clé étrangère (enfant dont le parent a été ignoré
-        //          par la dédup, ex. vente/réparation d'un client/caisse en
-        //          doublon). Dans les deux cas on journalise pour le responsable
-        //          (§9) et on POURSUIT : la synchro n'est JAMAIS bloquée. La
-        //          réconciliation (fusion + réaffectation) est un traitement
-        //          serveur de consolidation à venir.
+        //          par la dédup). Dans les deux cas on journalise et on POURSUIT.
         final dedup = msg.contains('23505');
         final orphelin = msg.contains('23503');
         if (dedup || orphelin) {
@@ -133,7 +172,7 @@ Future<Response> _upload(Request req) async {
           );
           skipped++;
         } else {
-          rethrow; // erreur réelle -> échec du batch
+          rethrow;
         }
       }
     }
@@ -142,22 +181,22 @@ Future<Response> _upload(Request req) async {
       headers: {'Content-Type': 'application/json'},
     );
   } catch (e, st) {
-    stderr.writeln('upload error: $e\n$st');
+    stderr.writeln('[ERROR] upload: $e\n$st');
     return Response.internalServerError(
-      body: jsonEncode({'error': e.toString()}),
+      body: jsonEncode({'error': 'Erreur interne du serveur'}),
       headers: {'Content-Type': 'application/json'},
     );
   }
 }
 
-/// Variante de _applyOp opérant sur une session de transaction (TxSession).
+/// Applique une opération CRUD sur la session fournie.
 Future<void> _applyOpOnSession(Session s, Map<String, dynamic> op) async {
   final table = op['table'] as String;
   final id = op['id'] as String;
   final kind = (op['op'] as String).toLowerCase();
   final data = (op['data'] as Map?)?.cast<String, dynamic>() ?? {};
   final cols = _schemaCache[table];
-  if (cols == null) throw Exception('Table inconnue: $table');
+  if (cols == null) throw Exception('Table inconnue');
 
   if (kind == 'delete') {
     await s.execute(Sql.named('DELETE FROM "$table" WHERE id = @id::uuid'),
@@ -213,22 +252,30 @@ Future<void> _applyOpOnSession(Session s, Map<String, dynamic> op) async {
 }
 
 Future<void> main() async {
-  // Mot de passe Postgres via l'environnement (PGPASSWORD ; cf. les scripts et
-  // backend/scripts/local.env.ps1, non versionné). Défaut conventionnel sinon.
-  final pgPassword = Platform.environment['PGPASSWORD'] ?? 'postgres';
+  // ─── Connexion PostgreSQL ────────────────────────────────────────────────
+  final pgPassword = _envOpt('PGPASSWORD');
+  if (pgPassword == null) {
+    stderr.writeln(
+        '[WARN] PGPASSWORD non définie — connexion sans mot de passe (dev uniquement).');
+  }
+
   _db = await Connection.open(
     Endpoint(
-      host: _pgEndpoint.host,
-      port: _pgEndpoint.port,
-      database: _pgEndpoint.database,
-      username: _pgEndpoint.username,
-      password: pgPassword,
+      host: _env('DB_HOST', 'localhost'),
+      port: int.tryParse(_env('DB_PORT', '5432')) ?? 5432,
+      database: _env('DB_NAME', 'bej'),
+      username: _env('DB_USER', 'postgres'),
+      password: pgPassword ?? '',
     ),
-    settings: const ConnectionSettings(sslMode: SslMode.disable),
+    settings: const ConnectionSettings(
+      sslMode: SslMode.disable,
+      queryTimeout: Duration(seconds: 30),
+    ),
   );
   await _loadSchema();
-  stdout.writeln('Schéma chargé : ${_schemaCache.length} tables.');
+  stdout.writeln('[INFO] Schéma chargé : ${_schemaCache.length} tables.');
 
+  // ─── Routeur ─────────────────────────────────────────────────────────────
   final router = Router()
     ..get('/health', (Request r) => Response.ok(
           jsonEncode({'status': 'ok', 'tables': _schemaCache.length}),
@@ -236,9 +283,18 @@ Future<void> main() async {
         ))
     ..post('/upload', _upload);
 
-  final handler =
-      const Pipeline().addMiddleware(_cors()).addHandler(router.call);
+  final handler = const Pipeline()
+      .addMiddleware(_cors())
+      .addMiddleware(_securityHeaders())
+      .addHandler(router.call);
 
-  final server = await io.serve(handler, 'localhost', 8080);
-  stdout.writeln('Backend BEJ à l\'écoute sur http://${server.address.host}:${server.port}');
+  final host = _env('HOST', 'localhost');
+  final port = int.tryParse(_env('PORT', '8080')) ?? 8080;
+  final server = await io.serve(handler, host, port);
+  stdout.writeln(
+      '[INFO] Backend BEJ sur http://${server.address.host}:${server.port}');
+  stdout
+      .writeln('[INFO] CORS origin : ${_env('BEJ_CORS_ORIGIN', 'http://localhost:5000')}');
+  stdout.writeln(
+      '[INFO] Auth /upload : ${_envOpt('BEJ_UPLOAD_TOKEN') != null ? 'activée (token Bearer)' : 'désactivée (dev)'}');
 }

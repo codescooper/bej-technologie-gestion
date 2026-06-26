@@ -48,6 +48,13 @@ class PhotoRepository {
     String? typePhoto,
     required String dataUrl,
   }) async {
+    if (!dataUrl.startsWith('data:image/')) {
+      throw ArgumentError('Le fichier doit être une image (data:image/…).');
+    }
+    // ~5 Mo base64 ≈ 3,75 Mo image compressée — suffit pour intake photo
+    if (dataUrl.length > 6 * 1024 * 1024) {
+      throw ArgumentError('Image trop volumineuse (max 5 Mo).');
+    }
     final now = DateTime.now().toUtc().toIso8601String();
     await db.execute(
       'INSERT INTO photos_appareil(id, reparation_id, type_photo, '

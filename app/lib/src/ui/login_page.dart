@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../app_session.dart';
 import '../data/repositories/auth_repository.dart';
@@ -136,11 +137,12 @@ class _LoginPageState extends State<LoginPage> {
                           label: Text(_busy ? 'Connexion…' : 'Se connecter'),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'PIN démo — admin 1111 · caissier 2222 · responsable 3333 · technicien 4444',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
+                        if (kDebugMode)
+                          const Text(
+                            'PIN démo — admin 1111 · caissier 2222 · responsable 3333 · technicien 4444',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
                       ],
                     ),
             ),
