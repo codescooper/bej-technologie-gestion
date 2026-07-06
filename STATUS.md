@@ -1,5 +1,5 @@
 # STATUS — BEJ Technologie (Application de gestion)
-> Dernière MAJ : 2026-06-18 (Phase 3 implémentée)
+> Dernière MAJ : 2026-07-06 (Paramètres Twilio testables + ouverts au caissier)
 
 ## 🎯 Objectif de la phase actuelle
 **Phase 3 (FNE/DGI + Notifications + Fidélité)** — Services métier avancés implémentés
@@ -8,6 +8,19 @@ mais non activé (endpoint DGI fictif à remplacer). App pleinement fonctionnell
 ces services (pattern nullable).
 
 ## ✅ Fait (cette semaine)
+- **Paramètres Twilio testables + ouverts au caissier (06/07/2026)** — bouton
+  **« Tester la configuration »** dans ⚙️ Paramètres › Notifications : envoie un
+  vrai SMS/WhatsApp de test au numéro saisi, avec les identifiants du formulaire
+  (sans enregistrer d'abord) ; les erreurs Twilio (mauvais numéro, clé invalide…)
+  sont remontées **en clair** dans une boîte de dialogue
+  (`NotificationService.envoyerTest`). **Accès Paramètres élargi** : le
+  **caissier** voit désormais l'icône ⚙️ et l'onglet **Notifications**
+  (`peutParametres` = tout sauf technicien) ; **FNE fiscal + Fidélité restent
+  responsable/admin** (`peutParametresAvances`, onglets masqués pour le caissier).
+  **Identifiants Twilio verrouillés** pour le caissier : SID/token/numéro
+  masqués (encart 🔒), il ne peut qu'**activer/désactiver + tester** ; seul
+  responsable/admin saisit les clés. `flutter analyze` 0 err/warn +
+  `flutter build web --release` OK.
 - **Sécurisation production (26/06/2026)** — 8 corrections critiques/importantes :
   CORS restreint à `BEJ_CORS_ORIGIN` (env var, plus de `*`) ; auth `/upload` par token
   Bearer (`BEJ_UPLOAD_TOKEN`, gated — inactif en dev) ; headers sécurité HTTP
@@ -102,6 +115,7 @@ ces services (pattern nullable).
 ## ⏭️ Prochaine étape (la SEULE chose à faire ensuite)
 **Connecter les credentials réels** (Twilio account_sid/token et endpoint DGI) dans
 l'écran ⚙️ Paramètres pour activer les notifications SMS/WhatsApp et la soumission FNE.
+Twilio se vérifie désormais en un clic via le bouton **« Tester »** (onglet Notifications).
 
 ## 🧱 Décisions verrouillées
 - Stack figée (cahier v1.1) : client **Flutter** (cible **web**/CanvasKit), base locale

@@ -40,6 +40,10 @@ class AppSession extends ChangeNotifier {
   bool get peutValiderRetour => _estResp;
   bool get peutDashboard => _estResp;
   bool get peutGererQrCodes => _estResp;
+  // Écran Paramètres : le caissier peut configurer (notifications) ; FNE fiscal
+  // et campagnes fidélité restent réservés au responsable/admin (avancé).
+  bool get peutParametres => _roleCode != 'technicien';
+  bool get peutParametresAvances => _estResp;
   bool get peutModifierDiagnostic => _roleCode != 'caissier';
   bool get peutChangerMagasin => _estResp;
   bool get peutDashboardGlobal => estAdmin;

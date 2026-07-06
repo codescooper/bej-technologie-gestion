@@ -282,14 +282,15 @@ class _AppShellState extends State<AppShell> {
                   icon: const Icon(Icons.slideshow),
                 ),
               if (widget.phase3Repo != null &&
-                  widget.session.peutGererQrCodes)
+                  widget.session.peutParametres)
                 IconButton(
-                  tooltip: 'Paramètres (FNE, Notifications, Fidélité)',
+                  tooltip: 'Paramètres',
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => ParametresPage(
                         session: widget.session,
                         phase3Repo: widget.phase3Repo!,
+                        notifService: widget.notifService,
                       ),
                     ),
                   ),

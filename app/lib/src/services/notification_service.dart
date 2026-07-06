@@ -81,6 +81,58 @@ class NotificationService {
     );
   }
 
+  /// Envoie un message de **test** avec des identifiants fournis directement
+  /// (pas forcément encore enregistrés). Sert au bouton « Tester » de l'écran
+  /// Paramètres. Ne journalise pas ; retourne `(ok, erreur)` pour affichage.
+  Future<({bool ok, String? erreur})> envoyerTest({
+    required String accountSid,
+    required String authToken,
+    required String from,
+    required String numeroDest,
+    required bool whatsapp,
+  }) async {
+    if (accountSid.isEmpty || authToken.isEmpty || from.isEmpty) {
+      return (ok: false, erreur: 'Renseignez le SID, le token et le numéro expéditeur.');
+    }
+    final dest = ClientRepository.normalizePhone(numeroDest);
+    if (dest == null) {
+      return (ok: false, erreur: 'Numéro destinataire invalide.');
+    }
+    final to = whatsapp ? 'whatsapp:$dest' : dest;
+    final fromN =
+        whatsapp && !from.startsWith('whatsapp:') ? 'whatsapp:$from' : from;
+    const body = 'BEJ Technologie : ceci est un message de test. '
+        'Votre configuration de notifications fonctionne. ✅';
+    try {
+      final url = Uri.parse(
+        'https://api.twilio.com/2010-04-01/Accounts/$accountSid/Messages.json',
+      );
+      final credentials = base64Encode(utf8.encode('$accountSid:$authToken'));
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Basic $credentials',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {'To': to, 'From': fromN, 'Body': body},
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return (ok: true, erreur: null);
+      }
+      // Twilio renvoie un JSON { "message": "...", "code": ... } explicite.
+      String detail = 'Erreur Twilio (HTTP ${response.statusCode})';
+      try {
+        final j = jsonDecode(response.body);
+        if (j is Map && j['message'] != null) {
+          detail = j['message'].toString();
+        }
+      } catch (_) {}
+      return (ok: false, erreur: detail);
+    } catch (e) {
+      return (ok: false, erreur: 'Échec réseau : $e');
+    }
+  }
+
   // ── Interne ────────────────────────────────────────────────────────────────
 
   static bool _statutNotifiable(String s) =>

@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import '../app_session.dart';
 import '../data/repositories/phase3_repository.dart';
+import '../services/notification_service.dart';
 
 /// Paramètres Phase 3 : FNE/DGI, Notifications SMS/WhatsApp, Campagnes fidélité.
-/// Accessible aux responsables/admins uniquement.
+/// Notifications accessibles au caissier ; FNE + Fidélité réservés
+/// responsable/admin (onglets masqués sinon).
 class ParametresPage extends StatefulWidget {
   final AppSession session;
   final Phase3Repository phase3Repo;
+  final NotificationService? notifService;
 
   const ParametresPage({
     super.key,
     required this.session,
     required this.phase3Repo,
+    this.notifService,
   });
 
   @override
@@ -20,12 +24,14 @@ class ParametresPage extends StatefulWidget {
 
 class _ParametresPageState extends State<ParametresPage>
     with SingleTickerProviderStateMixin {
-  late TabController _tabs;
+  late final TabController _tabs;
+  late final bool _avance; // FNE + Fidélité réservés responsable/admin
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _avance = widget.session.peutParametresAvances;
+    _tabs = TabController(length: _avance ? 3 : 1, vsync: this);
   }
 
   @override
@@ -41,19 +47,25 @@ class _ParametresPageState extends State<ParametresPage>
         title: const Text('Paramètres'),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(icon: Icon(Icons.receipt_long), text: 'FNE / DGI'),
-            Tab(icon: Icon(Icons.message), text: 'Notifications'),
-            Tab(icon: Icon(Icons.stars), text: 'Fidélité'),
+          tabs: [
+            if (_avance)
+              const Tab(icon: Icon(Icons.receipt_long), text: 'FNE / DGI'),
+            const Tab(icon: Icon(Icons.message), text: 'Notifications'),
+            if (_avance) const Tab(icon: Icon(Icons.stars), text: 'Fidélité'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabs,
         children: [
-          _FneTab(session: widget.session, repo: widget.phase3Repo),
-          _NotifTab(session: widget.session, repo: widget.phase3Repo),
-          _CampagnesTab(session: widget.session, repo: widget.phase3Repo),
+          if (_avance) _FneTab(session: widget.session, repo: widget.phase3Repo),
+          _NotifTab(
+            session: widget.session,
+            repo: widget.phase3Repo,
+            notifService: widget.notifService,
+          ),
+          if (_avance)
+            _CampagnesTab(session: widget.session, repo: widget.phase3Repo),
         ],
       ),
     );
@@ -287,7 +299,8 @@ class _HistoriqueFacturesFne extends StatelessWidget {
 class _NotifTab extends StatefulWidget {
   final AppSession session;
   final Phase3Repository repo;
-  const _NotifTab({required this.session, required this.repo});
+  final NotificationService? notifService;
+  const _NotifTab({required this.session, required this.repo, this.notifService});
   @override
   State<_NotifTab> createState() => _NotifTabState();
 }
@@ -296,11 +309,13 @@ class _NotifTabState extends State<_NotifTab> {
   final _sid = TextEditingController();
   final _token = TextEditingController();
   final _from = TextEditingController();
+  final _testNumero = TextEditingController();
   bool _actif = false;
   bool _whatsapp = false;
   bool _loading = true;
   bool _saving = false;
   bool _showToken = false;
+  bool _testing = false;
 
   @override
   void initState() {
@@ -313,7 +328,50 @@ class _NotifTabState extends State<_NotifTab> {
     _sid.dispose();
     _token.dispose();
     _from.dispose();
+    _testNumero.dispose();
     super.dispose();
+  }
+
+  Future<void> _test() async {
+    final svc = widget.notifService;
+    if (svc == null) return;
+    final numero = _testNumero.text.trim();
+    if (numero.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saisissez un numéro pour le test.')));
+      return;
+    }
+    setState(() => _testing = true);
+    final res = await svc.envoyerTest(
+      accountSid: _sid.text.trim(),
+      authToken: _token.text.trim(),
+      from: _from.text.trim(),
+      numeroDest: numero,
+      whatsapp: _whatsapp,
+    );
+    if (!mounted) return;
+    setState(() => _testing = false);
+    if (res.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.green.shade700,
+        content: Text('Message de test envoyé à $numero.'),
+      ));
+    } else {
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          icon: const Icon(Icons.error_outline, color: Colors.red),
+          title: const Text('Échec du test'),
+          content: Text(res.erreur ?? 'Erreur inconnue.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Fermer'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -384,39 +442,50 @@ class _NotifTabState extends State<_NotifTab> {
         ),
         const Divider(),
         const SizedBox(height: 8),
-        TextField(
-          controller: _sid,
-          decoration: const InputDecoration(
-            labelText: 'Twilio Account SID',
-            hintText: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-            prefixIcon: Icon(Icons.account_circle),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _token,
-          obscureText: !_showToken,
-          decoration: InputDecoration(
-            labelText: 'Auth Token',
-            prefixIcon: const Icon(Icons.key),
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              icon: Icon(_showToken ? Icons.visibility_off : Icons.visibility),
-              onPressed: () => setState(() => _showToken = !_showToken),
+        if (widget.session.peutParametresAvances) ...[
+          TextField(
+            controller: _sid,
+            decoration: const InputDecoration(
+              labelText: 'Twilio Account SID',
+              hintText: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+              prefixIcon: Icon(Icons.account_circle),
+              border: OutlineInputBorder(),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _from,
-          decoration: InputDecoration(
-            labelText: _whatsapp ? 'Numéro WhatsApp Twilio' : 'Numéro SMS Twilio',
-            hintText: _whatsapp ? 'whatsapp:+14155238886' : '+14155238886',
-            prefixIcon: Icon(_whatsapp ? Icons.chat_bubble_outline : Icons.sms),
-            border: const OutlineInputBorder(),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _token,
+            obscureText: !_showToken,
+            decoration: InputDecoration(
+              labelText: 'Auth Token',
+              prefixIcon: const Icon(Icons.key),
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(_showToken ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _showToken = !_showToken),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _from,
+            decoration: InputDecoration(
+              labelText:
+                  _whatsapp ? 'Numéro WhatsApp Twilio' : 'Numéro SMS Twilio',
+              hintText: _whatsapp ? 'whatsapp:+14155238886' : '+14155238886',
+              prefixIcon: Icon(_whatsapp ? Icons.chat_bubble_outline : Icons.sms),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ] else
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.lock_outline),
+              title: Text('Identifiants Twilio gérés par le responsable'),
+              subtitle: Text('Vous pouvez activer/désactiver les notifications '
+                  'et envoyer un message de test.'),
+            ),
+          ),
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
@@ -431,6 +500,59 @@ class _NotifTabState extends State<_NotifTab> {
           ),
         ),
         const SizedBox(height: 24),
+        if (widget.notifService != null) ...[
+          const Divider(),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tester la configuration',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Envoie un vrai message aux identifiants saisis ci-dessus '
+                    '(pas besoin d\'enregistrer d\'abord) pour vérifier vos '
+                    'clés Twilio.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _testNumero,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Numéro destinataire du test',
+                      hintText: '+225 07 00 00 00 00',
+                      prefixIcon: Icon(Icons.phone_forwarded),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _testing ? null : _test,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.send),
+                      label: Text(_testing
+                          ? 'Envoi…'
+                          : (_whatsapp
+                              ? 'Envoyer un WhatsApp de test'
+                              : 'Envoyer un SMS de test')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
         Text('Dernières notifications',
             style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
