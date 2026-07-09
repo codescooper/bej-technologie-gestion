@@ -1,13 +1,24 @@
 # STATUS — BEJ Technologie (Application de gestion)
-> Dernière MAJ : 2026-07-06 (Paramètres Twilio testables + ouverts au caissier)
+> Dernière MAJ : 2026-07-06 (Audit prod + durcissement fiabilité backend — cap pilote mono-poste)
 
 ## 🎯 Objectif de la phase actuelle
-**Phase 3 (FNE/DGI + Notifications + Fidélité)** — Services métier avancés implémentés
-(migration 011, repos, services, UI Paramètres, campagnes). FNE/DGI configurable
-mais non activé (endpoint DGI fictif à remplacer). App pleinement fonctionnelle sans
-ces services (pattern nullable).
+**Pilote mono-poste (démo client, une boutique, localhost).** Décision produit :
+déployer d'abord sur **1 boutique / 1 caisse** en local ; le multi-boutiques sera
+tranché « après succès » (plan chiffré prêt — voir Obsidian : ADR-0005 + note plan).
+Objectif immédiat : **durcir le mono-poste** pour un handoff client fiable.
+(Phase 3 FNE/DGI/Twilio : implémentée, configurable, non activée — pattern nullable.)
 
 ## ✅ Fait (cette semaine)
+- **Audit prod 4 agents + durcissement fiabilité backend (06/07/2026)** — audit
+  multi-agents (sécurité/données/qualité/ops) : **mono-poste PRÊT SOUS CONDITIONS**,
+  **multi-poste PAS PRÊT**. Décision d'archi multi-boutiques « write-local,
+  aggregate-global » + **plan chiffré (~21–31 j)** consignés dans Obsidian
+  (ADR-0005 + note plan). **Backend fiabilisé** (`server.dart`, commit `3093935`) :
+  **pool PG + reconnexion auto** (survit aux coupures du cluster portable),
+  **quarantaine anti-poison-pill** (une op rejetée ne fige plus la sync ; réponse
+  `{applied, skipped, failed}`), **`/health` teste la base** (503 si PG KO),
+  chargement schéma avec ré-essais. `dart compile kernel` OK ; runtime DB validé
+  par la CI (smoke local bloqué par le conflit de port 5432 connu).
 - **Paramètres Twilio testables + ouverts au caissier (06/07/2026)** — bouton
   **« Tester la configuration »** dans ⚙️ Paramètres › Notifications : envoie un
   vrai SMS/WhatsApp de test au numéro saisi, avec les identifiants du formulaire
@@ -113,9 +124,12 @@ ces services (pattern nullable).
 - [ ] Rien d'actif.
 
 ## ⏭️ Prochaine étape (la SEULE chose à faire ensuite)
-**Connecter les credentials réels** (Twilio account_sid/token et endpoint DGI) dans
-l'écran ⚙️ Paramètres pour activer les notifications SMS/WhatsApp et la soumission FNE.
-Twilio se vérifie désormais en un clic via le bouton **« Tester »** (onglet Notifications).
+**Ops du pilote mono-poste** : sauvegarde **planifiée hors-disque** (+ test de
+restauration réel), **auto-démarrage** au login (tâche planifiée → `restart-stack.ps1`),
+**exclusion antivirus** de `C:\dev\pgdata` (cause racine de l'instabilité PG), et
+**runbook 1 page** pour le handoff client. (Ensuite : changer les PIN par défaut ;
+contrainte stock ≥ 0 = décision bloquer vs autoriser la survente. Credentials réels
+Twilio/DGI : quand le client les fournit — bouton « Tester » déjà prêt.)
 
 ## 🧱 Décisions verrouillées
 - Stack figée (cahier v1.1) : client **Flutter** (cible **web**/CanvasKit), base locale
