@@ -23,7 +23,7 @@ import 'package:shelf_router/shelf_router.dart';
 ///   BEJ_CORS_ORIGIN   Origine CORS autorisée       (défaut : http://localhost:5000)
 ///   BEJ_UPLOAD_TOKEN  Token Bearer pour /upload    (absent → pas d'auth, mode dev)
 
-late Connection _db;
+late Pool _db;
 
 /// table -> { colonne -> type de cast Postgres }, chargé au démarrage.
 final Map<String, Map<String, String>> _schemaCache = {};
@@ -116,6 +116,26 @@ Future<void> _loadSchema() async {
   }
 }
 
+/// Charge le schéma en ré-essayant : PostgreSQL peut démarrer lentement
+/// (recovery ~30 s après un crash) — on attend plutôt que d'abandonner.
+Future<void> _loadSchemaAvecReessais({int maxTentatives = 15}) async {
+  for (var tentative = 1;; tentative++) {
+    try {
+      await _loadSchema();
+      return;
+    } catch (e) {
+      if (tentative >= maxTentatives) {
+        stderr.writeln(
+            '[ERROR] Schéma illisible après $maxTentatives tentatives : $e');
+        rethrow;
+      }
+      stderr.writeln(
+          '[WARN] PostgreSQL indisponible (tentative $tentative/$maxTentatives) — nouvel essai dans 3 s…');
+      await Future<void>.delayed(const Duration(seconds: 3));
+    }
+  }
+}
+
 /// Convertit une valeur JSON en représentation texte acceptée par le cast SQL.
 String _stringify(Object value) {
   if (value is Map || value is List) return jsonEncode(value);
@@ -142,42 +162,41 @@ Future<Response> _upload(Request req) async {
     final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
     final batch = (body['batch'] as List).cast<Map<String, dynamic>>();
     var applied = 0;
-    var skipped = 0;
-    // Chaque opération est appliquée en AUTO-COMMIT (sa propre micro-transaction).
-    // Évite le piège du savepoint dans une transaction postgres marquée échouée :
-    // un conflit n'« abîme » plus la transaction globale. Les upserts
-    // ON CONFLICT (id) rendent toute reprise idempotente.
+    var skipped = 0; // conflits bénins attendus (doublon/orphelin de la dédup)
+    var failed = 0; // rejets réels (CHECK/cast/bug) — mis en quarantaine, à investiguer
+    // Chaque opération est appliquée en AUTO-COMMIT (sa propre micro-transaction)
+    // sur le pool. AUCUN échec d'op ne doit figer le lot : sinon le client ne
+    // valide pas sa transaction CRUD et PowerSync la rejoue en boucle → toute la
+    // file de sync se bloque en silence (l'appli croit être « hors ligne »).
+    // On MET DONC TOUTE ERREUR EN QUARANTAINE (journalisée) et on POURSUIT.
+    // Les upserts ON CONFLICT (id) rendent toute reprise idempotente.
     for (final op in batch) {
       try {
         await _applyOpOnSession(_db, op);
         applied++;
       } catch (e) {
         final msg = e.toString();
-        // 23505 = conflit de clé naturelle (doublon offline, §2.6).
-        // 23503 = violation de clé étrangère (enfant dont le parent a été ignoré
-        //          par la dédup). Dans les deux cas on journalise et on POURSUIT.
-        final dedup = msg.contains('23505');
-        final orphelin = msg.contains('23503');
-        if (dedup || orphelin) {
-          await _db.execute(
-            Sql.named(
-                'INSERT INTO journal_audit(action, entite, entite_id, details) '
-                'VALUES(@a, @t, @eid::uuid, @d::jsonb)'),
-            parameters: {
-              'a': dedup ? 'conflit_sync_dedup' : 'conflit_sync_orphelin',
-              't': op['table'],
-              'eid': op['id'],
-              'd': jsonEncode({'op': op['op'], 'erreur': msg}),
-            },
-          );
+        // 23505 = doublon de clé naturelle (offline, §2.6) ; 23503 = orphelin FK.
+        // Ces deux-là sont des conflits de convergence ATTENDUS (bénins).
+        if (msg.contains('23505') || msg.contains('23503')) {
+          await _quarantaine(
+              msg.contains('23505')
+                  ? 'conflit_sync_dedup'
+                  : 'conflit_sync_orphelin',
+              op,
+              msg);
           skipped++;
         } else {
-          rethrow;
+          // Rejet réel (CHECK 23514, NOT NULL 23502, cast 22P02, table inconnue…).
+          await _quarantaine('rejet_sync', op, msg);
+          failed++;
+          stderr.writeln(
+              '[WARN] op rejetée (quarantaine) : ${op['op']} ${op['table']}/${op['id']} — $msg');
         }
       }
     }
     return Response.ok(
-      jsonEncode({'applied': applied, 'skipped': skipped}),
+      jsonEncode({'applied': applied, 'skipped': skipped, 'failed': failed}),
       headers: {'Content-Type': 'application/json'},
     );
   } catch (e, st) {
@@ -186,6 +205,27 @@ Future<Response> _upload(Request req) async {
       body: jsonEncode({'error': 'Erreur interne du serveur'}),
       headers: {'Content-Type': 'application/json'},
     );
+  }
+}
+
+/// Journalise une opération rejetée SANS jamais échouer elle-même : `entite_id`
+/// est laissé NULL (l'id peut ne pas être un UUID valide selon l'erreur), et
+/// toute erreur de journalisation est avalée — une quarantaine ne doit jamais
+/// re-déclencher le blocage qu'elle est censée éviter.
+Future<void> _quarantaine(
+    String action, Map<String, dynamic> op, String msg) async {
+  try {
+    await _db.execute(
+      Sql.named('INSERT INTO journal_audit(action, entite, details) '
+          'VALUES(@a, @t, @d::jsonb)'),
+      parameters: {
+        'a': action,
+        't': op['table'],
+        'd': jsonEncode({'id': op['id'], 'op': op['op'], 'erreur': msg}),
+      },
+    );
+  } catch (e2) {
+    stderr.writeln('[WARN] journal quarantaine échoué ($action) : $e2');
   }
 }
 
@@ -251,6 +291,25 @@ Future<void> _applyOpOnSession(Session s, Map<String, dynamic> op) async {
   }
 }
 
+/// Sonde de disponibilité : teste RÉELLEMENT la base (SELECT 1). Renvoie 503 si
+/// PostgreSQL est injoignable, pour que le client bascule en offline au lieu de
+/// croire le backend sain alors qu'aucune écriture n'est possible.
+Future<Response> _health(Request req) async {
+  try {
+    await _db.execute('SELECT 1').timeout(const Duration(seconds: 3));
+    return Response.ok(
+      jsonEncode({'status': 'ok', 'tables': _schemaCache.length}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (_) {
+    return Response(
+      503,
+      body: jsonEncode({'status': 'db_indisponible'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
 Future<void> main() async {
   // ─── Connexion PostgreSQL ────────────────────────────────────────────────
   final pgPassword = _envOpt('PGPASSWORD');
@@ -259,28 +318,41 @@ Future<void> main() async {
         '[WARN] PGPASSWORD non définie — connexion sans mot de passe (dev uniquement).');
   }
 
-  _db = await Connection.open(
-    Endpoint(
-      host: _env('DB_HOST', 'localhost'),
-      port: int.tryParse(_env('DB_PORT', '5432')) ?? 5432,
-      database: _env('DB_NAME', 'bej'),
-      username: _env('DB_USER', 'postgres'),
-      password: pgPassword ?? '',
-    ),
-    settings: const ConnectionSettings(
+  // Pool plutôt qu'une connexion unique : gère la concurrence ET rouvre
+  // automatiquement une connexion après une coupure PostgreSQL (le cluster
+  // portable de la boutique retombe/redémarre — cf. risques connus).
+  _db = Pool.withEndpoints(
+    [
+      Endpoint(
+        host: _env('DB_HOST', 'localhost'),
+        port: int.tryParse(_env('DB_PORT', '5432')) ?? 5432,
+        database: _env('DB_NAME', 'bej'),
+        username: _env('DB_USER', 'postgres'),
+        password: pgPassword ?? '',
+      ),
+    ],
+    settings: const PoolSettings(
       sslMode: SslMode.disable,
       queryTimeout: Duration(seconds: 30),
+      connectTimeout: Duration(seconds: 10),
+      maxConnectionCount: 8,
     ),
   );
-  await _loadSchema();
+
+  // Chargement du schéma avec ré-essais (PostgreSQL peut démarrer lentement).
+  try {
+    await _loadSchemaAvecReessais();
+  } catch (_) {
+    stderr.writeln(
+        '[FATAL] PostgreSQL injoignable au démarrage — backend arrêté. '
+        'Vérifiez que le cluster est lancé (restart-stack.ps1).');
+    exit(1);
+  }
   stdout.writeln('[INFO] Schéma chargé : ${_schemaCache.length} tables.');
 
   // ─── Routeur ─────────────────────────────────────────────────────────────
   final router = Router()
-    ..get('/health', (Request r) => Response.ok(
-          jsonEncode({'status': 'ok', 'tables': _schemaCache.length}),
-          headers: {'Content-Type': 'application/json'},
-        ))
+    ..get('/health', _health)
     ..post('/upload', _upload);
 
   final handler = const Pipeline()
