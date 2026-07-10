@@ -62,6 +62,10 @@ jobs:
     env:
       PGPASSWORD: bej_ci_pwd
       DISPLAY: ":99"
+      # L'app de test est servie sur localhost:5000 (voir --web-port ci-dessous) ;
+      # le backend doit autoriser cette origine (CORS restreint depuis le
+      # durcissement sécurité : plus de « * »).
+      BEJ_CORS_ORIGIN: http://localhost:5000
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -101,6 +105,6 @@ jobs:
             flutter drive \
               --driver=test_driver/integration_test.dart \
               --target=integration_test/$t.dart \
-              -d web-server --browser-name=chrome
+              -d web-server --web-port=5000 --browser-name=chrome
             echo "::endgroup::"
           done
